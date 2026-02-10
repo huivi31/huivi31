@@ -1,87 +1,80 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen)
+# 🛡️ 数字孪生风控系统 (3D Next-Gen)
 
-> **A Multi-Agent Adversarial Simulation System for Content Safety**
+> **基于多智能体对抗模拟的下一代内容安全风控系统**
 
-This project implements a digital twin environment where AI agents act as "attackers" (simulating real-world users trying to bypass censorship) and a "central inspector" (the content safety system) to test and improve moderation rules.
+本项目构建了一个沉浸式的数字孪生环境，通过 **26个性格迥异的AI攻击智能体**（模拟真实世界的各类用户）与 **中心质检智能体**（内容安全系统）进行持续的对抗演练，以自动化地发现风控漏洞并优化审核规则。
 
-## 🌟 Key Features
+## 🌟 核心特性
 
-### 1. 🧠 Autonomous Attack Agents
+### 1. 🧠 自主攻击智能体 (Autonomous Attack Agents)
 
-- **Persona-Driven**: 26 distinct user personas (e.g., "Keyboard Warrior", "Reviewer", "Troll") with unique behaviors.
-- **Adaptive Strategy**: Agents learn from failures, escalating their strategies from simple keyword evasion to complex semantic attacks.
-- **Knowledge Sharing**: Agents share successful bypass techniques with each other through simulated "discussions" and "strategy meetings".
-- **Techniques**: Supports various evasion methods:
-  - Homophones & Pinyin (e.g., "zf" for Government)
-  - Emoji & Symbols
-  - Historical Allusions
-  - Multilingual Mixing
-  - Semantic Sarcasm
+- **人设驱动**: 内置 26 种典型用户画像（如"阴阳怪气"、"理中客"、"键盘侠"等），每种角色拥有独特的行为模式。
+- **策略进化**: 智能体具备**自我学习能力**，从失败中总结经验，自动升级攻击策略（从简单的拼音绕过升级到复杂的语义隐喻）。
+- **群体智慧**: 智能体之间会进行"私下交流"（Simulated Discussions）和"策略会议"，分享成功的绕过技巧，模拟真实的网络传播效应。
+- **全方位攻击手法**:
+  - 🗣️ **语言变形**: 拼音缩写 (zf)、同音字替换、拆字
+  - 🎭 **语义伪装**: 阴阳怪气、反讽、历史影射、文学隐喻
+  - 🔣 **符号混淆**: Emoji替代、火星文、多语言混合
 
-### 2. 🛡️ Multi-Layer Defense System
+### 2. 🛡️ 五层纵深防御体系 (Multi-Layer Defense)
 
-A robust, deterministic rule engine that operates in 5 layers:
+构建了确定性与智能性结合的 5 层拦截引擎：
 
-1. **Keyword Matching**: Exact match against sensitive words.
-2. **Pinyin Analysis**: Detects pinyin abbreviations and homophones.
-3. **Regex Patterns**: Identifies complex sentence structures and combinations.
-4. **Custom Variants**: Learns from user feedback and new slang.
-5. **Semantic Analysis (LLM)**: Fallback to LLM for subtle contextual violations (e.g., sarcasm, metaphor).
+1. **关键词匹配**: 毫秒级拦截基础违规词。
+2. **拼音还原**: 自动识别拼音缩写和同音词。
+3. **正则模式**: 捕获复杂的句式组合。
+4. **自定义变体库**: 实时学习并拦截新出现的黑话。
+5. **语义分析 (LLM)**: 识别上下文相关的隐晦违规（如讽刺、影射）。
 
-### 3. 🔄 Adversarial Evolution Loop
+### 3. 🔄 动态对抗闭环
 
-- **Round 1 (Baseline)**: Agents attack based on their initial knowledge.
-- **Learning Phase**: Agents discuss successful bypasses and learn new techniques from peers.
-- **Round 2 (Evolved)**: Agents attack again with upgraded strategies.
-- **Analysis**: System calculates "Rule Degradation Rate" to measure how quickly a rule becomes obsolete.
+- **基线测试**: 智能体基于初始知识发起第一轮攻击。
+- **学习进化**: 失败的智能体向成功的"同行"学习，获取新技巧。
+- **演化攻击**: 智能体使用升级后的策略发起第二轮更猛烈的攻击。
+- **效果分析**: 系统自动计算**规则强健度**和**衰减率**，量化风控体系在面对新型攻击时的表现。
 
-### 4. 🧠 Knowledge Feed System
+### 4. 🧠 知识投喂系统 (Knowledge Feed)
 
-- Users can "feed" the agents with real-world data:
-  - **Attack Materials**: Text samples of real violations.
-  - **Slang Dictionary**: New internet slang definitions.
-  - **Bypass Cases**: Examples of successful evasion.
-- Agents digest this knowledge to craft more realistic attacks.
+- 支持实时投喂最新的**网络黑话**、**攻击样本**和**绕过案例**。
+- 智能体能够即时消化这些新知识，并在下一次攻击中灵活运用，检验风控系统的响应速度。
 
-## 🚀 Architecture
+## 🚀 系统架构
 
-- **`agents.py`**: Defines `AttackAgent`, `CentralInspectorAgent`, and system state.
-- **`battle.py`**: Implements the adversarial loop, agent discussions, and strategy meetings.
-- **`rule_engine.py`**: The deterministic 5-layer content inspection engine.
-- **`attack_knowledge.py`**: Manages the knowledge base, few-shot examples, and strategy escalation.
-- **`web_app.py`**: Flask server providing APIs for the frontend.
-- **`templates/index.html`**: 3D Visualization frontend (Three.js + React-like UI).
+- **`agents.py`**: 定义智能体核心逻辑 (AttackAgent, CentralInspectorAgent) 及系统状态。
+- **`battle.py`**: 实现对抗演练、智能体讨论、策略会议等交互逻辑。
+- **`rule_engine.py`**: 确定性的 5 层内容检测引擎。
+- **`web_app.py`**: Flask 后端服务，提供 RESTful API。
+- **`templates/index.html`**: 基于 Three.js 的 3D 可视化前端，提供沉浸式监控体验。
 
-## 🛠️ Usage
+## 🛠️ 快速开始
 
-### Prerequisites
+### 环境要求
 
 - Python 3.8+
-- API Key (Gemini or OpenAI)
+- API Key (支持 Gemini 或 OpenAI)
 
-### Installation
+### 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Running the Server
+### 启动系统
 
 ```bash
 python web_app.py
 ```
 
-Access the dashboard at `http://localhost:8000`
+访问控制台: `http://localhost:8000`
 
-## 📊 Workflow
+## 📊 使用流程
 
-1. **Rule Setup**: Define your content moderation rules in the UI.
-2. **Knowledge Feed (Optional)**: Feed the agents with latest internet slang or attack examples.
-3. **Baseline Test**: Run a test against all 26 agents.
-4. **Evolution**: Watch agents discuss and learn from each other.
-5. **Adversarial Test**: See if the agents can now bypass your rules with their new knowledge.
-6. **Analysis**: Review the report to see which rules failed and which techniques are most effective.
+1. **制定规则**: 在控制台输入初始的内容审核规则。
+2. **知识投喂 (可选)**: 投喂最新的网络热梗或攻击样本。
+3. **基线测试**: 观察 26 个智能体的首轮攻击效果。
+4. **群体演化**: 观察智能体之间的策略交流和学习过程。
+5. **对抗测试**: 检验风控规则能否抵御升级后的攻击。
+6. **分析报告**: 查看详细的攻防分析报告，识别规则漏洞。
 
-## 🤝 Contribution
-
-This project is a demo for next-generation content safety testing. Feel free to contribute via PRs.
+---
+*此项目为下一代内容风控系统的概念验证 (PoC)*
