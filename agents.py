@@ -11,14 +11,61 @@ import json
 import os
 
 from config import API_CONFIG
-from user_personas import USER_PERSONAS
+from config_store import CONFIG_STORE
+from user_personas import USER_PERSONAS, ATTACK_TECHNIQUES
 from rule_engine import RULE_ENGINE, AuditResult
 from attack_knowledge import (
     KNOWLEDGE_STORE, ATTACK_EXAMPLES, STRATEGY_LEVELS,
     get_examples_for_technique, get_strategy_level, get_escalation_hint,
 )
 
-PERSONA_INDEX = {p["id"]: p for p in USER_PERSONAS}
+CONFIG_STORE.initialize(
+    default_personas=USER_PERSONAS,
+    default_techniques=ATTACK_TECHNIQUES,
+)
+
+
+def _load_runtime_personas() -> list:
+    personas = CONFIG_STORE.list_personas()
+    if personas:
+        valid = [p for p in personas if p.get("id")]
+        if valid:
+            return valid
+    return [dict(p) for p in USER_PERSONAS]
+
+
+def _load_technique_library() -> dict:
+    techniques = CONFIG_STORE.get_technique_map()
+    return techniques if techniques else ATTACK_TECHNIQUES
+
+
+def _build_peripheral_state(personas: list) -> dict:
+    def _base_capability(persona: dict) -> float:
+        skill_level = float(persona.get("skill_level", 1) or 1)
+        stealth = float(persona.get("stealth_rating", 0.5) or 0.5)
+        return round(1.0 + skill_level * 0.6 + stealth * 0.8, 2)
+
+    return {
+        p["id"]: {
+            "persona": p,
+            "learned_techniques": [],
+            "success_count": 0,
+            "fail_count": 0,
+            "evolution_level": 1,
+            "capability_score": _base_capability(p),
+            "learning_points": 0,
+            "knowledge_depth": 0,
+            "knowledge_boost": 0.0,
+            "last_strategy": None,
+        }
+        for p in personas
+        if p.get("id")
+    }
+
+
+RUNTIME_PERSONAS = _load_runtime_personas()
+TECHNIQUE_LIBRARY = _load_technique_library()
+PERSONA_INDEX = {p["id"]: p for p in RUNTIME_PERSONAS if p.get("id")}
 
 # ============================================================================
 # 系统状态管理
@@ -40,22 +87,170 @@ SYSTEM_STATE = {
         "current_task": None,
     },
     # 外围Agent状态
-    "peripheral_agents": {
-        p["id"]: {
-            "persona": p,
-            "learned_techniques": [],
-            "success_count": 0,
-            "fail_count": 0,
-            "evolution_level": 1,
-            "last_strategy": None,
-        } for p in USER_PERSONAS
-    },
+    "peripheral_agents": _build_peripheral_state(RUNTIME_PERSONAS),
     # 对抗历史记录
     "battle_history": [],
     # 当前规则
     "rules": [],
     "rules_version": 0,
 }
+
+
+def get_all_personas() -> list:
+    """Return runtime personas loaded from persistent storage."""
+    return RUNTIME_PERSONAS
+
+
+def get_technique_library() -> dict:
+    """Return runtime attack technique library."""
+    return TECHNIQUE_LIBRARY
+
+
+def reset_peripheral_agents_state():
+    """Reset agent runtime counters while keeping current persona configs."""
+    SYSTEM_STATE["peripheral_agents"] = _build_peripheral_state(get_all_personas())
+
+
+def export_peripheral_agents_state() -> dict:
+    """Create a deep-copy snapshot of current peripheral runtime state."""
+    return deepcopy(SYSTEM_STATE.get("peripheral_agents", {}))
+
+
+def restore_peripheral_agents_state(state_snapshot: dict):
+    """Restore peripheral runtime state from snapshot."""
+    if not isinstance(state_snapshot, dict):
+        return
+    SYSTEM_STATE["peripheral_agents"] = deepcopy(state_snapshot)
+
+
+def load_agent_runtime(agent) -> dict:
+    """Load persisted runtime state into AttackAgent instance."""
+    state = SYSTEM_STATE["peripheral_agents"].get(agent.persona_id, {})
+    agent.learned_techniques = state.get("learned_techniques", [])
+    agent.success_count = state.get("success_count", 0)
+    agent.fail_count = state.get("fail_count", 0)
+    agent.evolution_level = state.get("evolution_level", 1)
+    base_capability = 1.0 + float(agent.persona.get("skill_level", 1) or 1) * 0.6 + float(
+        agent.persona.get("stealth_rating", 0.5) or 0.5
+    ) * 0.8
+    agent.capability_score = float(state.get("capability_score", round(base_capability, 2)))
+    agent.learning_points = int(state.get("learning_points", 0))
+    agent.knowledge_depth = int(state.get("knowledge_depth", 0))
+    agent.knowledge_boost = float(state.get("knowledge_boost", 0.0))
+    agent.last_strategy = state.get("last_strategy")
+    return state
+
+
+def persist_agent_runtime(agent):
+    """Persist AttackAgent runtime state to SYSTEM_STATE."""
+    state = SYSTEM_STATE["peripheral_agents"].setdefault(
+        agent.persona_id,
+        {
+            "persona": agent.persona,
+            "learned_techniques": [],
+            "success_count": 0,
+            "fail_count": 0,
+            "evolution_level": 1,
+            "capability_score": 1.0,
+            "learning_points": 0,
+            "knowledge_depth": 0,
+            "knowledge_boost": 0.0,
+            "last_strategy": None,
+        },
+    )
+    state["persona"] = agent.persona
+    state["learned_techniques"] = list(agent.learned_techniques)
+    state["success_count"] = int(agent.success_count)
+    state["fail_count"] = int(agent.fail_count)
+    state["evolution_level"] = int(agent.evolution_level)
+    state["capability_score"] = round(float(agent.capability_score), 3)
+    state["learning_points"] = int(agent.learning_points)
+    state["knowledge_depth"] = int(agent.knowledge_depth)
+    state["knowledge_boost"] = round(float(agent.knowledge_boost), 3)
+    state["last_strategy"] = agent.last_strategy
+
+
+def absorb_knowledge_for_all_agents(feed_type: str, item_count: int, category: str = "", tags: list = None):
+    """
+    Broadcast fed knowledge to all agents.
+    More relevant personas gain stronger capability/knowledge boosts.
+    """
+    if item_count <= 0:
+        return
+
+    tags = tags or []
+    category_text = " ".join([category] + [str(t) for t in tags]).lower()
+
+    for persona in get_all_personas():
+        agent = AttackAgent(persona)
+        load_agent_runtime(agent)
+
+        relevance = 0.6
+        learnable_categories = [str(x).lower() for x in persona.get("learnable_categories", [])]
+        if any(cat in category_text for cat in learnable_categories):
+            relevance += 0.4
+
+        behavior_patterns = [str(x).lower() for x in persona.get("behavior_patterns", [])]
+        if any(pattern in category_text for pattern in behavior_patterns):
+            relevance += 0.3
+
+        if feed_type == "cases":
+            relevance += 0.2
+        elif feed_type == "slang":
+            relevance += 0.15
+
+        agent.absorb_knowledge(item_count=item_count, feed_type=feed_type, relevance=min(relevance, 1.5))
+
+
+def persist_persona_update(persona: dict):
+    """Persist persona configuration and refresh in-memory index."""
+    global RUNTIME_PERSONAS
+
+    persona_id = (persona or {}).get("id")
+    if not persona_id:
+        raise ValueError("persona id is required")
+
+    CONFIG_STORE.upsert_persona(persona)
+
+    replaced = False
+    for i, current in enumerate(RUNTIME_PERSONAS):
+        if current.get("id") == persona_id:
+            RUNTIME_PERSONAS[i] = persona
+            replaced = True
+            break
+
+    if not replaced:
+        RUNTIME_PERSONAS.append(persona)
+
+    PERSONA_INDEX.clear()
+    PERSONA_INDEX.update({p["id"]: p for p in RUNTIME_PERSONAS if p.get("id")})
+
+    state = SYSTEM_STATE["peripheral_agents"].get(persona_id)
+    if not state:
+        base_capability = 1.0 + float(persona.get("skill_level", 1) or 1) * 0.6 + float(
+            persona.get("stealth_rating", 0.5) or 0.5
+        ) * 0.8
+        SYSTEM_STATE["peripheral_agents"][persona_id] = {
+            "persona": persona,
+            "learned_techniques": [],
+            "success_count": 0,
+            "fail_count": 0,
+            "evolution_level": 1,
+            "capability_score": round(base_capability, 2),
+            "learning_points": 0,
+            "knowledge_depth": 0,
+            "knowledge_boost": 0.0,
+            "last_strategy": None,
+        }
+    else:
+        state["persona"] = persona
+
+
+def persist_technique_update(category: str, name: str, details: dict):
+    """Persist technique definition and refresh runtime technique map."""
+    global TECHNIQUE_LIBRARY
+    CONFIG_STORE.upsert_technique(category=category, name=name, details=details)
+    TECHNIQUE_LIBRARY = _load_technique_library()
 
 # ============================================================================
 # 实时事件系统 - 记录Agent活动供前端展示
@@ -467,6 +662,11 @@ class AttackAgent:
         self.fail_count = 0
         # 演化等级
         self.evolution_level = 1
+        # 能力分（决定进化速度、上下文利用能力）
+        self.capability_score = 1.0
+        self.learning_points = 0
+        self.knowledge_depth = 0
+        self.knowledge_boost = 0.0
         # 上次使用的策略
         self.last_strategy = None
         
@@ -519,18 +719,116 @@ class AttackAgent:
     def _fallback_generate(self) -> str:
         """LLM不可用时的回退生成"""
         return ""
-    
+
+    def _build_technique_profile(self, effective_level: int = None) -> dict:
+        """
+        Build unlocked technique profile by persona category, difficulty and runtime capability.
+        Technique metadata supports optional fields:
+        - difficulty / min_level / min_effective_level
+        - min_capability
+        - min_knowledge_depth
+        """
+        if effective_level is None:
+            capability_bonus_level = int(self.capability_score // 2.5)
+            effective_level = min(5, max(self.evolution_level, 1 + capability_bonus_level))
+
+        categories = [str(x).strip() for x in self.persona.get("learnable_categories", []) if str(x).strip()]
+        affinity = self.technique_affinity if isinstance(self.technique_affinity, dict) else {}
+        library = get_technique_library()
+
+        scored = {}
+        for category, techniques in (library or {}).items():
+            if categories and category not in categories:
+                continue
+            if not isinstance(techniques, dict):
+                continue
+
+            for name, details in techniques.items():
+                meta = details if isinstance(details, dict) else {}
+                min_level = int(
+                    meta.get("min_effective_level")
+                    or meta.get("min_level")
+                    or meta.get("difficulty")
+                    or 1
+                )
+                min_capability = float(meta.get("min_capability") or 0.0)
+                min_knowledge = int(meta.get("min_knowledge_depth") or 0)
+                if effective_level < min_level:
+                    continue
+                if self.capability_score < min_capability:
+                    continue
+                if self.knowledge_depth < min_knowledge:
+                    continue
+
+                base_affinity = float(affinity.get(name, 0.35))
+                maturity_bonus = max(0.0, (effective_level - min_level) * 0.12)
+                learned_bonus = 0.2 if name in self.learned_techniques else 0.0
+                score = round(base_affinity + maturity_bonus + learned_bonus, 4)
+
+                current = scored.get(name)
+                candidate = {
+                    "name": name,
+                    "category": category,
+                    "min_level": min_level,
+                    "score": score,
+                }
+                if not current or score > current["score"]:
+                    scored[name] = candidate
+
+        ordered = sorted(scored.values(), key=lambda x: (-x["score"], x["min_level"], x["name"]))
+        unlocked = [x["name"] for x in ordered]
+        advanced = [x["name"] for x in ordered if x["min_level"] >= 4]
+        return {
+            "effective_level": effective_level,
+            "unlocked": unlocked,
+            "advanced": advanced,
+            "ordered": ordered,
+        }
+
+    def _unlock_progressive_techniques(self, effective_level: int = None):
+        """Auto-unlock 1-2 higher-value techniques when capability/knowledge increases."""
+        profile = self._build_technique_profile(effective_level=effective_level)
+        unlocked = profile.get("unlocked", [])
+        if not unlocked:
+            return
+
+        candidates = [name for name in unlocked if name not in self.learned_techniques]
+        if not candidates:
+            return
+
+        # High-level agents can absorb more techniques per iteration.
+        max_gain = 1 + (1 if profile.get("effective_level", 1) >= 4 else 0)
+        for name in candidates[:max_gain]:
+            self.learned_techniques.append(name)
+
+    def get_technique_profile(self) -> dict:
+        """Public view of current unlocked technique profile."""
+        return self._build_technique_profile()
+
     def craft_attack(self, target_topic: str, iteration: int = 0) -> dict:
         """
         根据人设和目标话题生成帖子
         增强版：使用知识库样本 + 5级策略升级链 + 失败反馈定向调整
         """
+        # 能力分会带来策略等级增益（企业场景下用于模拟持续进化）
+        capability_bonus_level = int(self.capability_score // 2.5)
+        effective_level = min(5, max(self.evolution_level, 1 + capability_bonus_level))
         # 确定当前策略等级
-        strategy = get_strategy_level(self.evolution_level)
+        strategy = get_strategy_level(effective_level)
         strategy_techniques = strategy["techniques"]
+        technique_profile = self._build_technique_profile(effective_level=effective_level)
+        unlocked_techniques = technique_profile.get("unlocked", [])
+        advanced_techniques = technique_profile.get("advanced", [])
         
         # 根据人设 + 策略等级选择技巧
-        available_techniques = self.behavior_patterns + self.learned_techniques
+        available_techniques = list(
+            dict.fromkeys(
+                self.behavior_patterns
+                + self.learned_techniques
+                + strategy_techniques
+                + unlocked_techniques
+            )
+        )
         if not available_techniques:
             available_techniques = strategy_techniques
         
@@ -539,14 +837,21 @@ class AttackAgent:
         if iteration > 0 and self.last_strategy:
             hit_layer = self.last_strategy.get("hit_layer", "")
             if self.last_strategy.get("detected", False) and hit_layer:
-                escalation_hint = get_escalation_hint(self.evolution_level, hit_layer)
+                escalation_hint = get_escalation_hint(effective_level, hit_layer)
                 # 优先使用策略等级推荐的技巧
-                available_techniques = strategy_techniques + available_techniques
+                available_techniques = list(dict.fromkeys(strategy_techniques + available_techniques))
         
-        # 选技巧：优先选与策略等级匹配的
-        matching = [t for t in available_techniques if t in strategy_techniques]
-        if matching:
-            main_technique = random.choice(matching)
+        # 选技巧：高级能力优先更高门槛技巧，低级优先策略基线技巧。
+        priority_pool = []
+        if effective_level >= 4 and advanced_techniques:
+            priority_pool.extend(advanced_techniques)
+        priority_pool.extend([t for t in strategy_techniques if t in available_techniques])
+        if self.learned_techniques:
+            priority_pool.extend([t for t in self.learned_techniques if t in available_techniques])
+        priority_pool = list(dict.fromkeys(priority_pool))
+
+        if priority_pool and random.random() < 0.8:
+            main_technique = random.choice(priority_pool[: max(1, min(10, len(priority_pool)))])
         elif available_techniques:
             main_technique = random.choice(available_techniques)
         else:
@@ -556,8 +861,12 @@ class AttackAgent:
         examples_text = get_examples_for_technique(main_technique)
         
         # 获取投喂的知识
+        context_budget = 2200 + int(self.capability_score * 320) + int(self.knowledge_depth * 12)
         fed_knowledge = KNOWLEDGE_STORE.get_relevant_knowledge(
-            technique=main_technique, topic=target_topic
+            technique=main_technique,
+            topic=target_topic,
+            limit=28,
+            context_budget=min(12000, context_budget),
         )
         
         # 构建增强版 prompt
@@ -571,7 +880,9 @@ class AttackAgent:
 【角色特点】：{description}
 【擅长技巧】：{', '.join(self.behavior_patterns)}
 【额外学会】：{learned_techs_str}
-【当前策略等级】：Level {self.evolution_level} - {strategy['name']}
+【当前策略等级】：Level {effective_level} - {strategy['name']}（基础等级{self.evolution_level}）
+【能力分】：{self.capability_score:.2f} / 10
+【知识深度】：{self.knowledge_depth}
 【策略指导】：{strategy['prompt_hint']}
 
 {examples_text}
@@ -612,9 +923,14 @@ class AttackAgent:
         result["category"] = self.category
         result["target_topic"] = target_topic
         result["evolution_level"] = self.evolution_level
+        result["effective_level"] = effective_level
+        result["capability_score"] = round(self.capability_score, 3)
+        result["knowledge_depth"] = self.knowledge_depth
         result["strategy_level"] = strategy["name"]
         result["iteration"] = iteration
         result["learned_techniques_count"] = len(self.learned_techniques)
+        result["unlocked_techniques_count"] = len(unlocked_techniques)
+        result["advanced_techniques_count"] = len(advanced_techniques)
         result["is_fallback"] = False
         
         self.last_strategy = result
@@ -759,6 +1075,37 @@ class AttackAgent:
             "complexity_score": 3,
             "is_fallback": True
         }
+
+    def _sync_runtime_state(self):
+        persist_agent_runtime(self)
+
+    def absorb_knowledge(self, item_count: int, feed_type: str = "", relevance: float = 1.0):
+        """投喂后知识吸收：增加知识深度与能力分。"""
+        if item_count <= 0:
+            return
+        relevance = max(0.1, min(float(relevance or 1.0), 2.0))
+        gain = item_count * relevance
+        self.knowledge_depth += int(round(gain))
+        self.learning_points += max(1, int(round(gain * 0.6)))
+        self.knowledge_boost = min(5.0, self.knowledge_boost + gain * 0.03)
+
+        # 高质量案例对成长更明显
+        if feed_type == "cases":
+            self.capability_score = min(10.0, self.capability_score + gain * 0.05)
+        elif feed_type == "slang":
+            self.capability_score = min(10.0, self.capability_score + gain * 0.035)
+        else:
+            self.capability_score = min(10.0, self.capability_score + gain * 0.025)
+
+        # 学习积分触发进化等级提升
+        threshold = 4 + self.evolution_level * 3
+        while self.learning_points >= threshold and self.evolution_level < 5:
+            self.learning_points -= threshold
+            self.evolution_level += 1
+            threshold = 4 + self.evolution_level * 3
+
+        self._unlock_progressive_techniques()
+        self._sync_runtime_state()
     
     def learn_from_result(self, success: bool, technique_used: str, detected: bool = False,
                           hit_layer: str = "", hit_layer_num: int = 0):
@@ -774,21 +1121,34 @@ class AttackAgent:
         
         if success:
             self.success_count += 1
+            self.learning_points += 2
+            self.capability_score = min(10.0, self.capability_score + 0.15)
             if technique_used and technique_used not in self.learned_techniques:
-                if random.random() < 0.3:
+                if random.random() < 0.45:
                     self.learned_techniques.append(f"{technique_used}进阶")
         else:
             self.fail_count += 1
+            self.learning_points += 1
+            # 被拦截也会触发学习，但增益低于成功
+            self.capability_score = min(10.0, self.capability_score + 0.05)
             # 失败时必定提升策略等级（不再是30%概率）
             # 策略等级越高，下次用的手法越高级
             self.evolution_level = min(self.evolution_level + 1, 5)
-        
-        # 更新系统状态
-        SYSTEM_STATE["peripheral_agents"][self.persona_id]["success_count"] = self.success_count
-        SYSTEM_STATE["peripheral_agents"][self.persona_id]["fail_count"] = self.fail_count
-        SYSTEM_STATE["peripheral_agents"][self.persona_id]["learned_techniques"] = self.learned_techniques
-        SYSTEM_STATE["peripheral_agents"][self.persona_id]["evolution_level"] = self.evolution_level
-        SYSTEM_STATE["peripheral_agents"][self.persona_id]["last_strategy"] = self.last_strategy
+
+        # 被高层拦截说明对抗强度提升，需要更高能力
+        if hit_layer_num >= 4:
+            self.learning_points += 1
+            self.capability_score = min(10.0, self.capability_score + 0.04)
+
+        # 学习积分触发进化提升
+        threshold = 4 + self.evolution_level * 3
+        while self.learning_points >= threshold and self.evolution_level < 5:
+            self.learning_points -= threshold
+            self.evolution_level += 1
+            threshold = 4 + self.evolution_level * 3
+
+        self._unlock_progressive_techniques()
+        self._sync_runtime_state()
     
     def learn_from_peer(self, peer_technique: str, peer_category: str, peer_id: str = ""):
         """
@@ -800,15 +1160,14 @@ class AttackAgent:
         # 获取自己可以学习的技巧类别
         learnable_categories = self.persona.get("learnable_categories", [])
         
-        # 判断这个技巧是否与自己的学习范围相关
-        from user_personas import ATTACK_TECHNIQUES
-        
         # 检查是否可以学习
-        for cat, techniques in ATTACK_TECHNIQUES.items():
+        for cat, techniques in get_technique_library().items():
             if cat in learnable_categories and peer_technique in techniques:
                 if peer_technique not in self.learned_techniques:
                     self.learned_techniques.append(peer_technique)
-                    SYSTEM_STATE["peripheral_agents"][self.persona_id]["learned_techniques"] = self.learned_techniques
+                    self.learning_points += 2
+                    self.capability_score = min(10.0, self.capability_score + 0.08)
+                    self._sync_runtime_state()
                     
                     # 发送学习事件 - 用于前端绘制闪光关系线
                     EVENT_BUS.emit("agent_learned_from_peer", {
@@ -826,12 +1185,15 @@ class AttackAgent:
         """与其他Agent协作学习技巧"""
         if technique not in self.learned_techniques:
             self.learned_techniques.append(technique)
-            SYSTEM_STATE["peripheral_agents"][self.persona_id]["learned_techniques"] = self.learned_techniques
+            self.learning_points += 1
+            self.capability_score = min(10.0, self.capability_score + 0.05)
+            self._sync_runtime_state()
             return True
         return False
     
     def get_state(self) -> dict:
         """获取Agent当前状态"""
+        profile = self._build_technique_profile()
         return {
             "persona_id": self.persona_id,
             "name": self.name,
@@ -852,6 +1214,13 @@ class AttackAgent:
             "learned_techniques": self.learned_techniques,
             "base_techniques": self.behavior_patterns,
             "technique_affinity": self.technique_affinity,
+            "capability_score": round(self.capability_score, 3),
+            "learning_points": self.learning_points,
+            "knowledge_depth": self.knowledge_depth,
+            "knowledge_boost": round(self.knowledge_boost, 3),
+            "unlocked_techniques_count": len(profile.get("unlocked", [])),
+            "advanced_techniques_count": len(profile.get("advanced", [])),
+            "unlocked_techniques_preview": profile.get("unlocked", [])[:12],
         }
     
     def discuss_with_peer(self, peer_name: str, peer_technique: str, topic: str) -> dict:

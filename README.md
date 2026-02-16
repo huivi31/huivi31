@@ -44,6 +44,9 @@
 - **`battle.py`**: 实现对抗演练、智能体讨论、策略会议等交互逻辑。
 - **`rule_engine.py`**: 确定性的 5 层内容检测引擎。
 - **`web_app.py`**: Flask 后端服务，提供 RESTful API。
+- **`config_store.py`**: SQLite 持久化配置层（规则/用户画像/攻击技法）。
+- **`alerting.py`**: 企业告警分发层（通道阈值、告警事件、投递留痕）。
+- **`config.py`**: 环境变量配置入口（Gemini/OpenAI）。
 - **`templates/index.html`**: 基于 Three.js 的 3D 可视化前端，提供沉浸式监控体验。
 
 ## 🛠️ 快速开始
@@ -66,6 +69,90 @@ python web_app.py
 ```
 
 访问控制台: `http://localhost:8000`
+
+### 配置说明（企业化第一步）
+
+本项目现在支持把规则、画像、技法持久化到本地 SQLite（默认路径：`data/config.db`），重启后不会丢失。
+
+- `AI_PROVIDER`：`gemini` 或 `openai`（默认 `gemini`）
+- `GEMINI_API_KEY`：Gemini Key
+- `OPENAI_API_KEY`：OpenAI Key
+- `RISK_CONFIG_DB_PATH`：自定义配置库路径（可选）
+- `KNOWLEDGE_CONTEXT_BUDGET`：投喂知识注入模型上下文预算（默认 `6000` 字符）
+
+新增配置 API：
+
+- `GET /techniques`：查询技法库
+- `POST /techniques`：新增/更新技法
+- `GET /agent/{id}/techniques/unlocked`：查看单体Agent按能力解锁的技法
+- `GET /agents/progression`：查看全体Agent能力进化分布看板
+- `POST /rules/snapshots`：创建规则快照
+- `GET /rules/snapshots`：列出规则快照
+- `POST /rules/snapshots/{id}/apply`：应用规则快照
+- `POST /rules/change-requests`：创建规则变更申请（待审批）
+- `GET /rules/change-requests`：查看变更申请列表
+- `POST /rules/change-requests/{id}/review`：审批（approved/rejected）
+- `POST /rules/change-requests/{id}/apply`：应用已审批变更
+
+新增企业编排 API：
+
+- `POST /campaigns/run`：执行战役（基线轮 + 进化轮）
+- `GET /campaigns`：查看历史战役
+- `GET /campaigns/{campaign_id}`：查看单战役摘要
+- `GET /campaigns/{campaign_id}/replay`：回放战役样本
+- `POST /campaigns/compare`：跨战役指标对比
+- `POST /campaigns/ab-run`：快照A/B公平对比回归（同起点、同随机种子）
+- `POST /regressions/run`：多快照批量回归矩阵（可对接定时自动化）
+- `GET /regressions/reports`：查看回归报告列表
+- `GET /regressions/reports/{report_id}`：查看回归报告详情
+- `GET /regressions/reports/{report_id}/markdown`：下载回归报告Markdown
+- `POST /regressions/reports/{report_id}/dispatch-alerts`：按报告重发告警
+- `GET /knowledge/list?include_items=1`：查看投喂明细（含来源、标签）
+- `GET /alerts/channels`：查看告警通道
+- `POST /alerts/channels`：新增/更新告警通道（event_bus/stdout/webhook）
+- `POST /alerts/channels/{id}/toggle`：启停告警通道
+- `GET /alerts/incidents`：查看告警事件（可按状态/严重级别过滤）
+- `POST /alerts/incidents/{id}/ack`：确认或关闭告警
+- `GET /alerts/deliveries`：查看告警投递日志
+- `GET /audit/logs`：查看审计日志（规则变更/回归/告警等）
+
+### 企业化运行流程（推荐）
+
+1. 技法与画像配置：通过 `POST /techniques` 和 `POST /agent/{id}/config` 配置攻击类型与角色能力边界。  
+2. 资料投喂学习：调用 `POST /knowledge/feed`，携带 `source`、`tags`、`category`，系统会自动触发全体攻击体知识吸收与能力成长。  
+3. 规则变更申请：将候选规则提交到 `POST /rules/change-requests`，进入待审批状态。  
+4. 审批与落地：使用 `POST /rules/change-requests/{id}/review` 审批，再 `POST /rules/change-requests/{id}/apply` 应用。  
+5. 战役编排执行：调用 `POST /campaigns/run` 运行“基线 + 演化”流程，结果写入持久化结果仓。  
+6. 回放与复盘：使用 `GET /campaigns/{id}/replay` 查看每条攻防记录（命中层、技巧、能力分、绕过结果）。  
+7. 规则快照与回归：`POST /rules/snapshots` 固化版本，再用 `POST /campaigns/ab-run` 与 `POST /regressions/run` 做公平回归。  
+8. 告警与审计：通过 `/alerts/*` 管理告警通道和事件，通过 `GET /audit/logs` 保留可追溯操作链路。  
+
+### 攻击能力递进机制（可直接接大上下文模型）
+
+- 技法库可配置难度与门槛：`POST /techniques` 支持 `difficulty|min_level|min_effective_level|min_capability|min_knowledge_depth` 字段。  
+- Agent 解锁策略：系统根据 `evolution_level + capability_score + knowledge_depth` 计算 `effective_level`，按门槛自动解锁更多高阶技巧。  
+- 资料投喂增益：`POST /knowledge/feed` 会持续提升 `knowledge_depth` 与 `capability_score`，并触发阶段性技法解锁。  
+- 可观测性：用 `GET /agent/{id}/techniques/unlocked` 观察单体解锁轨迹，用 `GET /agents/progression` 观察群体进化分布。  
+
+### 夜间回归（脚本）
+
+可以直接用脚本跑 nightly，并根据告警等级返回退出码（方便接 CI / crontab）：
+
+```bash
+python nightly_regression.py \
+  --snapshot-ids rs_xxx,rs_yyy \
+  --scenario nightly-regression \
+  --baseline-rounds 1 \
+  --adversarial-rounds 1 \
+  --max-degradation 10 \
+  --min-adversarial-detection 60 \
+  --max-top-bypass-rate 55 \
+  --dispatch-alerts 1 \
+  --alert-channel-ids default_event_bus \
+  --fail-on warning \
+  --output-json nightly_result.json \
+  --output-md nightly_report.md
+```
 
 ## 📊 使用流程
 

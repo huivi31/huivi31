@@ -3,9 +3,9 @@ services:
     name: digital-twin-risk-demo
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: GEMINI_API_KEY
-        value: AIzaSyA3BK8OguVPVtz0J6YA7stqtWnido-Iv7Y
+        sync: false

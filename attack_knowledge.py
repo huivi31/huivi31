@@ -12,6 +12,9 @@
 import random
 import time
 import json
+import os
+
+from config_store import CONFIG_STORE
 
 
 # ============================================================================
@@ -252,26 +255,105 @@ class KnowledgeStore:
         self.fed_cases = []
         # 投喂版本号
         self.version = 0
-    
-    def feed_materials(self, texts: list, category: str = "通用") -> int:
+        # 给大上下文模型时，默认也限制注入大小，防止prompt污染
+        self.default_context_budget = int(os.getenv("KNOWLEDGE_CONTEXT_BUDGET", "6000"))
+        self._load_from_store()
+
+    def _load_from_store(self):
+        """启动时恢复持久化投喂数据"""
+        items = CONFIG_STORE.list_knowledge_items(limit=5000)
+        if not items:
+            return
+
+        # 先清空再恢复，保证顺序一致
+        self.fed_materials = []
+        self.fed_slang = []
+        self.fed_cases = []
+
+        # 旧到新恢复
+        for item in reversed(items):
+            feed_type = item.get("feed_type", "")
+            payload = item.get("payload", {})
+            timestamp = item.get("timestamp", time.time())
+            if feed_type == "materials":
+                text = (payload.get("text") or "").strip()
+                if text:
+                    self.fed_materials.append(
+                        {
+                            "text": text,
+                            "category": payload.get("category", "通用"),
+                            "timestamp": timestamp,
+                            "source": payload.get("source", "manual"),
+                            "tags": payload.get("tags", []),
+                        }
+                    )
+            elif feed_type == "slang":
+                term = (payload.get("term") or "").strip()
+                if term:
+                    self.fed_slang.append(
+                        {
+                            "term": term,
+                            "meaning": payload.get("meaning", ""),
+                            "timestamp": timestamp,
+                            "source": payload.get("source", "manual"),
+                            "tags": payload.get("tags", []),
+                        }
+                    )
+            elif feed_type == "cases":
+                bypass = (payload.get("bypass") or "").strip()
+                if bypass:
+                    self.fed_cases.append(
+                        {
+                            "original": payload.get("original", ""),
+                            "bypass": bypass,
+                            "technique": payload.get("technique", "通用"),
+                            "timestamp": timestamp,
+                            "source": payload.get("source", "manual"),
+                            "tags": payload.get("tags", []),
+                        }
+                    )
+
+        if items:
+            self.version += 1
+
+    def feed_materials(self, texts: list, category: str = "通用", source: str = "manual",
+                       tags: list = None) -> int:
         """投喂文本资料"""
         count = 0
+        tags = tags or []
         for text in texts:
             text = text.strip()
             if text and len(text) >= 5:
+                payload = {
+                    "text": text,
+                    "category": category,
+                    "source": source,
+                    "tags": tags,
+                }
+                now = time.time()
                 self.fed_materials.append({
                     "text": text,
                     "category": category,
-                    "timestamp": time.time(),
+                    "timestamp": now,
+                    "source": source,
+                    "tags": tags,
                 })
+                CONFIG_STORE.add_knowledge_item(
+                    feed_type="materials",
+                    payload=payload,
+                    category=category,
+                    source=source,
+                    tags=tags,
+                )
                 count += 1
         if count > 0:
             self.version += 1
         return count
     
-    def feed_slang(self, entries: list) -> int:
+    def feed_slang(self, entries: list, source: str = "manual", tags: list = None) -> int:
         """投喂行业黑话/暗语"""
         count = 0
+        tags = tags or []
         for entry in entries:
             if isinstance(entry, dict):
                 term = entry.get("term", "").strip()
@@ -288,19 +370,36 @@ class KnowledgeStore:
                 continue
             
             if term:
+                payload = {
+                    "term": term,
+                    "meaning": meaning,
+                    "source": source,
+                    "tags": tags,
+                }
+                now = time.time()
                 self.fed_slang.append({
                     "term": term,
                     "meaning": meaning,
-                    "timestamp": time.time(),
+                    "timestamp": now,
+                    "source": source,
+                    "tags": tags,
                 })
+                CONFIG_STORE.add_knowledge_item(
+                    feed_type="slang",
+                    payload=payload,
+                    category="slang",
+                    source=source,
+                    tags=tags,
+                )
                 count += 1
         if count > 0:
             self.version += 1
         return count
     
-    def feed_cases(self, cases: list) -> int:
+    def feed_cases(self, cases: list, source: str = "manual", tags: list = None) -> int:
         """投喂绕过案例"""
         count = 0
+        tags = tags or []
         for case in cases:
             if isinstance(case, dict):
                 original = case.get("original", "").strip()
@@ -310,59 +409,156 @@ class KnowledgeStore:
                 continue
             
             if bypass:
+                payload = {
+                    "original": original,
+                    "bypass": bypass,
+                    "technique": technique,
+                    "source": source,
+                    "tags": tags,
+                }
+                now = time.time()
                 self.fed_cases.append({
                     "original": original,
                     "bypass": bypass,
                     "technique": technique,
-                    "timestamp": time.time(),
+                    "timestamp": now,
+                    "source": source,
+                    "tags": tags,
                 })
+                CONFIG_STORE.add_knowledge_item(
+                    feed_type="cases",
+                    payload=payload,
+                    category="cases",
+                    technique=technique,
+                    source=source,
+                    tags=tags,
+                )
                 count += 1
         if count > 0:
             self.version += 1
         return count
     
-    def get_relevant_knowledge(self, technique: str = "", topic: str = "", limit: int = 5) -> str:
-        """获取与当前攻击相关的投喂知识，格式化为prompt片段"""
+    def _score_item(self, text: str, technique: str, topic: str, tags: list, timestamp: float) -> float:
+        score = 1.0
+        low_text = (text or "").lower()
+        low_technique = (technique or "").lower()
+        low_topic = (topic or "").lower()
+        if low_technique and low_technique in low_text:
+            score += 3.0
+        if low_topic and low_topic in low_text:
+            score += 2.5
+        if tags:
+            if any(low_technique and low_technique in str(t).lower() for t in tags):
+                score += 2.0
+            if any(low_topic and low_topic in str(t).lower() for t in tags):
+                score += 1.5
+        age_hours = max(0.0, (time.time() - float(timestamp or time.time())) / 3600.0)
+        score += 1.0 / (1.0 + age_hours / 24.0)
+        return score
+
+    def get_relevant_knowledge(self, technique: str = "", topic: str = "", limit: int = 20,
+                               context_budget: int = None) -> str:
+        """按相关性从知识仓中抽取上下文，带预算限制。"""
+        context_budget = int(context_budget or self.default_context_budget)
+        context_budget = max(800, context_budget)
         parts = []
-        
-        # 相关案例
-        relevant_cases = [c for c in self.fed_cases 
-                          if technique.lower() in c.get("technique", "").lower()
-                          or not technique]
-        if relevant_cases:
-            recent = relevant_cases[-limit:]
+        used = 0
+        technique = (technique or "").strip()
+        topic = (topic or "").strip()
+
+        candidates = []
+        for c in self.fed_cases:
+            text = f"{c.get('original', '')} {c.get('bypass', '')} {c.get('technique', '')}"
+            candidates.append(
+                (
+                    "case",
+                    self._score_item(text, technique, topic, c.get("tags", []), c.get("timestamp", 0)),
+                    c,
+                )
+            )
+        for s in self.fed_slang:
+            text = f"{s.get('term', '')} {s.get('meaning', '')}"
+            candidates.append(
+                (
+                    "slang",
+                    self._score_item(text, technique, topic, s.get("tags", []), s.get("timestamp", 0)),
+                    s,
+                )
+            )
+        for m in self.fed_materials:
+            text = m.get("text", "")
+            candidates.append(
+                (
+                    "material",
+                    self._score_item(text, technique, topic, m.get("tags", []), m.get("timestamp", 0)),
+                    m,
+                )
+            )
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        candidates = candidates[: max(10, limit * 3)]
+
+        case_lines = []
+        slang_lines = []
+        material_lines = []
+
+        for kind, _, item in candidates:
+            if len(case_lines) + len(slang_lines) + len(material_lines) >= limit:
+                break
+
+            if kind == "case":
+                line = (
+                    f"  原文: {item.get('original', '')}\n"
+                    f"  绕过: {item.get('bypass', '')}\n"
+                    f"  手法: {item.get('technique', '')}\n"
+                )
+                line_cost = len(line)
+                if used + line_cost > context_budget:
+                    continue
+                case_lines.append(line)
+                used += line_cost
+            elif kind == "slang":
+                line = f"  {item.get('term', '')} = {item.get('meaning', '')}"
+                line_cost = len(line) + 1
+                if used + line_cost > context_budget:
+                    continue
+                slang_lines.append(line)
+                used += line_cost
+            else:
+                line = f"  {item.get('text', '')[:180]}"
+                line_cost = len(line) + 1
+                if used + line_cost > context_budget:
+                    continue
+                material_lines.append(line)
+                used += line_cost
+
+        if case_lines:
             parts.append("【学长们成功绕过的案例】:")
-            for c in recent:
-                parts.append(f"  原文: {c['original']}")
-                parts.append(f"  绕过: {c['bypass']}")
-                parts.append(f"  手法: {c['technique']}")
-                parts.append("")
-        
-        # 行业黑话
-        if self.fed_slang:
-            recent = self.fed_slang[-10:]
+            parts.extend(case_lines)
+            parts.append("")
+        if slang_lines:
             parts.append("【圈内暗语/黑话】:")
-            for s in recent:
-                parts.append(f"  {s['term']} = {s['meaning']}")
+            parts.extend(slang_lines)
             parts.append("")
-        
-        # 通用资料
-        if self.fed_materials:
-            recent = self.fed_materials[-3:]
+        if material_lines:
             parts.append("【其他参考资料】:")
-            for m in recent:
-                parts.append(f"  {m['text'][:100]}")
+            parts.extend(material_lines)
             parts.append("")
-        
+
         return "\n".join(parts) if parts else ""
     
     def get_summary(self) -> dict:
         """获取投喂资料概要"""
+        persistent_stats = CONFIG_STORE.get_knowledge_stats()
         return {
             "materials_count": len(self.fed_materials),
             "slang_count": len(self.fed_slang),
             "cases_count": len(self.fed_cases),
             "version": self.version,
+            "context_budget": self.default_context_budget,
+            "persistent_total_items": persistent_stats.get("total_items", 0),
+            "persistent_by_type": persistent_stats.get("by_type", {}),
+            "top_sources": persistent_stats.get("top_sources", {}),
             "recent_materials": [m["text"][:50] for m in self.fed_materials[-5:]],
             "recent_slang": [f"{s['term']}={s['meaning']}" for s in self.fed_slang[-5:]],
             "recent_cases": [c["bypass"][:50] for c in self.fed_cases[-5:]],
@@ -373,6 +569,7 @@ class KnowledgeStore:
         self.fed_materials = []
         self.fed_slang = []
         self.fed_cases = []
+        CONFIG_STORE.clear_knowledge_items()
         self.version += 1
 
 

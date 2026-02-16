@@ -9,9 +9,8 @@ import json
 
 from agents import (
     SYSTEM_STATE, PERSONA_INDEX, EVENT_BUS,
-    AttackAgent, CENTRAL_INSPECTOR
+    AttackAgent, CENTRAL_INSPECTOR, load_agent_runtime
 )
-from user_personas import USER_PERSONAS
 
 # ============================================================================
 # Multi-Agent 讨论系统
@@ -224,11 +223,7 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
     attack_agent = AttackAgent(persona)
     
     # 恢复Agent的历史状态
-    agent_state = SYSTEM_STATE["peripheral_agents"].get(persona_id, {})
-    attack_agent.learned_techniques = agent_state.get("learned_techniques", [])
-    attack_agent.success_count = agent_state.get("success_count", 0)
-    attack_agent.fail_count = agent_state.get("fail_count", 0)
-    attack_agent.evolution_level = agent_state.get("evolution_level", 1)
+    load_agent_runtime(attack_agent)
     
     # 生成帖子（反贼不知道规则是什么）
     start_time = time.time()
@@ -267,6 +262,9 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
             "strategy": attack_result.get("strategy", ""),
             "complexity_score": attack_result.get("complexity_score", 5),
             "evolution_level": attack_agent.evolution_level,
+            "effective_level": attack_result.get("effective_level", attack_agent.evolution_level),
+            "capability_score": attack_result.get("capability_score", round(attack_agent.capability_score, 3)),
+            "knowledge_depth": attack_result.get("knowledge_depth", attack_agent.knowledge_depth),
             "iteration": iteration,
             "learned_techniques_count": len(attack_agent.learned_techniques),
             "processing_time": round(attack_time, 3),
@@ -348,8 +346,7 @@ def run_collaborative_attack(agent_ids: list, target_keyword: str) -> dict:
     collaboration_results = []
     for agent_id in agent_ids:
         agent = AttackAgent(PERSONA_INDEX[agent_id])
-        agent_state = SYSTEM_STATE["peripheral_agents"].get(agent_id, {})
-        agent.learned_techniques = agent_state.get("learned_techniques", [])
+        load_agent_runtime(agent)
         
         learned_new = []
         for tech in shared_techniques:

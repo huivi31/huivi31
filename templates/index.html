@@ -4,12 +4,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
+  <meta name="description" content="3D数字孪生风控风洞：多智能体攻防模拟、规则回归与风险可视化控制台" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
   <title>数字孪生风控风洞 | Digital Twin Risk Wind Tunnel v2</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
+    :root {
+      --top-bar-height: 56px;
+      --panel-bg: rgba(0, 15, 30, 0.9);
+      --panel-border: rgba(0, 200, 255, 0.2);
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -38,7 +43,7 @@
       top: 0;
       left: 0;
       right: 0;
-      height: 56px;
+      height: var(--top-bar-height);
       background: linear-gradient(180deg, rgba(0, 20, 40, 0.95) 0%, rgba(0, 10, 20, 0.9) 100%);
       border-bottom: 2px solid rgba(0, 200, 255, 0.4);
       display: flex;
@@ -153,11 +158,11 @@
     /* 左侧筛选面板 */
     .filter-panel {
       position: fixed;
-      top: 70px;
+      top: calc(var(--top-bar-height) + 14px);
       left: 12px;
       width: 160px;
-      background: rgba(0, 15, 30, 0.9);
-      border: 1px solid rgba(0, 200, 255, 0.2);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
       border-radius: 12px;
       padding: 14px;
       z-index: 100;
@@ -227,13 +232,13 @@
     /* 右侧控制面板 */
     .control-panel {
       position: fixed;
-      top: 70px;
+      top: calc(var(--top-bar-height) + 14px);
       right: 12px;
       width: 320px;
       max-height: calc(100vh - 80px);
       overflow-y: auto;
-      background: rgba(0, 15, 30, 0.9);
-      border: 1px solid rgba(0, 200, 255, 0.2);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
       border-radius: 12px;
       z-index: 100;
       backdrop-filter: blur(20px);
@@ -932,6 +937,135 @@
       animation: pulse-dot 2s ease-in-out infinite;
     }
 
+    .mobile-panel-toggle {
+      display: none;
+      position: fixed;
+      right: 12px;
+      bottom: 14px;
+      z-index: 150;
+      border: 1px solid rgba(0, 200, 255, 0.4);
+      background: linear-gradient(135deg, rgba(0, 120, 220, 0.92), rgba(0, 180, 255, 0.85));
+      color: #fff;
+      border-radius: 999px;
+      padding: 9px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      box-shadow: 0 10px 26px rgba(0, 120, 220, 0.35);
+      cursor: pointer;
+    }
+
+    .control-panel.mobile-collapsed {
+      transform: translateY(calc(100% - 68px));
+      transition: transform 0.28s ease;
+    }
+
+    .control-panel.mobile-expanded {
+      transform: translateY(0);
+      transition: transform 0.28s ease;
+    }
+
+    @media (max-width: 1200px) {
+      .stats-bar {
+        gap: 14px;
+      }
+
+      .stat-value {
+        font-size: 18px;
+      }
+
+      .control-panel {
+        width: 300px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      :root {
+        --top-bar-height: 76px;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      .top-bar {
+        padding: 8px 10px;
+        align-items: flex-start;
+      }
+
+      .logo h1 {
+        font-size: 12px;
+        letter-spacing: 2px;
+      }
+
+      .subtitle {
+        font-size: 9px;
+        letter-spacing: 1px;
+      }
+
+      .stats-bar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        width: 58%;
+        align-self: center;
+      }
+
+      .stat::before {
+        display: none;
+      }
+
+      .stat-value {
+        font-size: 14px;
+      }
+
+      .stat-label {
+        font-size: 8px;
+        letter-spacing: 1px;
+      }
+
+      .filter-panel {
+        left: 8px;
+        right: 8px;
+        width: auto;
+        top: calc(var(--top-bar-height) + 10px);
+        padding: 10px;
+        max-height: 110px;
+        overflow-y: auto;
+      }
+
+      .filter-title {
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+      }
+
+      .control-panel {
+        left: 8px;
+        right: 8px;
+        width: auto;
+        max-height: 62vh;
+        top: auto;
+        bottom: 62px;
+        border-radius: 14px;
+      }
+
+      .panel-section {
+        padding: 12px;
+      }
+
+      .legend,
+      .controls-hint,
+      .wind-tunnel-status {
+        display: none;
+      }
+
+      .mobile-panel-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+    }
+
     @keyframes pulse-dot {
 
       0%,
@@ -996,6 +1130,7 @@
       </div>
     </div>
   </div>
+  <button id="mobilePanelToggle" class="mobile-panel-toggle" type="button">控制台</button>
 
   <!-- 左侧筛选 -->
   <div class="filter-panel">
@@ -1361,6 +1496,30 @@
     let simulationRunning = false;
     let currentFilter = 'all';
 
+    function buildPerfProfile() {
+      const isMobile = window.matchMedia('(max-width: 860px)').matches;
+      const cores = navigator.hardwareConcurrency || 4;
+      const memory = navigator.deviceMemory || 4;
+      const lowPower = isMobile || cores <= 4 || memory <= 4;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      return {
+        isMobile,
+        lowPower,
+        reducedMotion,
+        maxPixelRatio: lowPower ? 1.2 : 1.7,
+        starCount: lowPower ? 1400 : 3200,
+        sphereWidthSegments: lowPower ? 16 : 24,
+        sphereHeightSegments: lowPower ? 12 : 16,
+        nodeSegments: lowPower ? 10 : 16,
+        eventPollMs: lowPower ? 1500 : 900,
+      };
+    }
+
+    const PERF_PROFILE = buildPerfProfile();
+    let hoverRAFToken = null;
+    let pendingHoverEvent = null;
+    let resizeDebounceTimer = null;
+
     // Sci-Fi 蓝调色板 - 统一科技蓝风格
     const categoryColors = {
       '正常用户': 0x00d4ff,
@@ -1425,17 +1584,28 @@
     const nodeSize = 5;
     const gridPointSize = 1.5;   // 网格交叉点大小 - 非常小
 
+    function applyRendererQuality() {
+      if (!renderer) return;
+      const ratio = Math.min(window.devicePixelRatio || 1, PERF_PROFILE.maxPixelRatio);
+      renderer.setPixelRatio(ratio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
     function init() {
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x00050a);
       scene.fog = new THREE.Fog(0x00050a, 500, 1500);
 
       camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 2000);
-      camera.position.set(0, 0, 750);
+      camera.position.set(0, 0, PERF_PROFILE.isMobile ? 860 : 750);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer = new THREE.WebGLRenderer({
+        antialias: !PERF_PROFILE.lowPower,
+        powerPreference: "high-performance",
+        alpha: false,
+      });
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      applyRendererQuality();
       document.getElementById('container').appendChild(renderer.domElement);
 
       raycaster = new THREE.Raycaster();
@@ -1481,7 +1651,11 @@
       geodesicGroup = new THREE.Group();
 
       // 使用经纬线网格
-      const sphereGeo = new THREE.SphereGeometry(sphereRadius, 24, 16);
+      const sphereGeo = new THREE.SphereGeometry(
+        sphereRadius,
+        PERF_PROFILE.sphereWidthSegments,
+        PERF_PROFILE.sphereHeightSegments
+      );
 
       // 提取经纬线交点位置
       const positions = sphereGeo.attributes.position;
@@ -1565,9 +1739,11 @@
 
     function createCentralInspectorAgent() {
       centralAgentGroup = new THREE.Group();
+      const coreSegments = PERF_PROFILE.lowPower ? 24 : 64;
+      const glowSegments = PERF_PROFILE.lowPower ? 22 : 64;
 
       // 1. 核心实心球 - 纯白
-      const coreGeo = new THREE.SphereGeometry(14, 64, 64);
+      const coreGeo = new THREE.SphereGeometry(14, coreSegments, coreSegments);
       const coreMat = new THREE.MeshBasicMaterial({
         color: 0xffffff
       });
@@ -1576,7 +1752,7 @@
       centralAgentGroup.add(core);
 
       // 2. 白色过渡层
-      const glow1Geo = new THREE.SphereGeometry(20, 64, 64);
+      const glow1Geo = new THREE.SphereGeometry(20, glowSegments, glowSegments);
       const glow1Mat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
@@ -1587,7 +1763,7 @@
       centralAgentGroup.add(glow1);
 
       // 3. 淡青白过渡
-      const glow2Geo = new THREE.SphereGeometry(28, 64, 64);
+      const glow2Geo = new THREE.SphereGeometry(28, glowSegments, glowSegments);
       const glow2Mat = new THREE.MeshBasicMaterial({
         color: 0xddf8ff,
         transparent: true,
@@ -1598,7 +1774,7 @@
       centralAgentGroup.add(glow2);
 
       // 4. 青色外层光晕
-      const glow3Geo = new THREE.SphereGeometry(38, 64, 64);
+      const glow3Geo = new THREE.SphereGeometry(38, glowSegments, glowSegments);
       const glow3Mat = new THREE.MeshBasicMaterial({
         color: 0x88eeff,
         transparent: true,
@@ -1634,7 +1810,7 @@
 
     function createStarField() {
       const geometry = new THREE.BufferGeometry();
-      const count = 4000;
+      const count = PERF_PROFILE.starCount;
       const positions = new Float32Array(count * 3);
       const colors = new Float32Array(count * 3);
 
@@ -1726,9 +1902,11 @@
     function createNode(nodeData) {
       const group = new THREE.Group();
       group.userData = nodeData;
+      const seg = PERF_PROFILE.nodeSegments;
+      const outerSeg = Math.max(8, seg - 4);
 
       // 核心发光点 - 高亮
-      const coreGeo = new THREE.SphereGeometry(nodeSize, 16, 16);
+      const coreGeo = new THREE.SphereGeometry(nodeSize, seg, seg);
       const coreMat = new THREE.MeshBasicMaterial({
         color: nodeData.color
       });
@@ -1736,7 +1914,7 @@
       group.add(core);
 
       // 内层发光
-      const innerGlowGeo = new THREE.SphereGeometry(nodeSize * 1.5, 16, 16);
+      const innerGlowGeo = new THREE.SphereGeometry(nodeSize * 1.5, seg, seg);
       const innerGlowMat = new THREE.MeshBasicMaterial({
         color: nodeData.color,
         transparent: true,
@@ -1746,7 +1924,7 @@
       group.add(new THREE.Mesh(innerGlowGeo, innerGlowMat));
 
       // 外层光晕
-      const outerGlowGeo = new THREE.SphereGeometry(nodeSize * 2.5, 16, 16);
+      const outerGlowGeo = new THREE.SphereGeometry(nodeSize * 2.5, outerSeg, outerSeg);
       const outerGlowMat = new THREE.MeshBasicMaterial({
         color: nodeData.color,
         transparent: true,
@@ -1756,7 +1934,7 @@
       group.add(new THREE.Mesh(outerGlowGeo, outerGlowMat));
 
       // 最外层微弱光晕
-      const haloGeo = new THREE.SphereGeometry(nodeSize * 4, 12, 12);
+      const haloGeo = new THREE.SphereGeometry(nodeSize * 4, outerSeg, outerSeg);
       const haloMat = new THREE.MeshBasicMaterial({
         color: nodeData.color,
         transparent: true,
@@ -1882,6 +2060,20 @@
     function initEvents() {
       let isDragging = false;
       let previousMousePosition = { x: 0, y: 0 };
+      const controlPanel = document.querySelector('.control-panel');
+      const mobilePanelToggle = document.getElementById('mobilePanelToggle');
+
+      const requestHoverUpdate = (event) => {
+        pendingHoverEvent = event;
+        if (hoverRAFToken) return;
+        hoverRAFToken = requestAnimationFrame(() => {
+          hoverRAFToken = null;
+          if (pendingHoverEvent) {
+            updateHover(pendingHoverEvent);
+            pendingHoverEvent = null;
+          }
+        });
+      };
 
       renderer.domElement.addEventListener('mousedown', e => {
         isDragging = true;
@@ -1895,7 +2087,7 @@
           rotateScene(deltaY * 0.004, deltaX * 0.004);
           previousMousePosition = { x: e.clientX, y: e.clientY };
         }
-        updateHover(e);
+        requestHoverUpdate(e);
       });
 
       renderer.domElement.addEventListener('mouseup', () => { isDragging = false; });
@@ -1994,10 +2186,37 @@
       });
 
       window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = setTimeout(() => {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          applyRendererQuality();
+        }, 120);
       });
+
+      if (mobilePanelToggle && controlPanel) {
+        const syncMobilePanel = () => {
+          const isMobile = window.matchMedia('(max-width: 860px)').matches;
+          if (!isMobile) {
+            controlPanel.classList.remove('mobile-collapsed', 'mobile-expanded');
+            mobilePanelToggle.style.display = 'none';
+            return;
+          }
+          mobilePanelToggle.style.display = 'inline-flex';
+          if (!controlPanel.classList.contains('mobile-expanded') && !controlPanel.classList.contains('mobile-collapsed')) {
+            controlPanel.classList.add('mobile-collapsed');
+          }
+        };
+
+        mobilePanelToggle.addEventListener('click', () => {
+          const expanded = controlPanel.classList.contains('mobile-expanded');
+          controlPanel.classList.toggle('mobile-expanded', !expanded);
+          controlPanel.classList.toggle('mobile-collapsed', expanded);
+          mobilePanelToggle.textContent = expanded ? '控制台' : '收起';
+        });
+        syncMobilePanel();
+        window.addEventListener('resize', syncMobilePanel);
+      }
 
       const runBtn = document.getElementById('runBtn');
       if (runBtn) runBtn.addEventListener('click', runTest);
@@ -2032,6 +2251,7 @@
       refreshRules();
       initWorkflowControls();
       initAgentEditor();
+      renderer.domElement.style.cursor = 'grab';
     }
 
     // ========== 角色配置编辑器 ==========
@@ -3353,10 +3573,6 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       }
     }
 
-    function closeModal() {
-      document.getElementById('modalOverlay').classList.remove('show');
-    }
-
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -3539,9 +3755,13 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       }
 
       // 显示模态框
-      const modal = document.getElementById('reportModal');
-      const modalTitle = modal.querySelector('.modal-title');
-      const modalBody = modal.querySelector('.modal-body');
+      const modalOverlay = document.getElementById('modalOverlay');
+      const modalTitle = modalOverlay.querySelector('.modal-title');
+      const modalBody = document.getElementById('reportContent');
+      if (!modalOverlay || !modalTitle || !modalBody) {
+        addLog('❌ 弹窗容器不可用', 'error');
+        return;
+      }
 
       modalTitle.textContent = '🎭 配置新角色';
       modalBody.innerHTML = `
@@ -3605,7 +3825,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
         </div>
       `;
 
-      modal.classList.add('show');
+      modalOverlay.classList.add('show');
     }
 
     // 创建新角色
@@ -3658,7 +3878,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       // 创建3D节点
       const mesh = createNode(newNodeData);
       nodeMeshes.push(mesh);
-      scene.add(mesh);
+      geodesicGroup.add(mesh);
 
       // 移除对应的空位点
       const gridPointIndex = gridPointMeshes.findIndex(pm =>
@@ -3687,18 +3907,17 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       selectedGridPoint = null;
     }
 
-    function closeModal() {
-      document.getElementById('reportModal').classList.remove('show');
-    }
-
     function createRippleEffect(position, color) {
+      if (PERF_PROFILE.reducedMotion) {
+        return;
+      }
       // 创建流畅的涟漪效果 - 更快的响应
-      const ringCount = 2; // 减少环数量，更简洁
+      const ringCount = PERF_PROFILE.lowPower ? 1 : 2; // 低性能设备减少动画环
 
       for (let i = 0; i < ringCount; i++) {
         setTimeout(() => {
           // 使用更薄的环，更精致
-          const ringGeo = new THREE.RingGeometry(0.5, 1.5, 32);
+          const ringGeo = new THREE.RingGeometry(0.5, 1.5, PERF_PROFILE.lowPower ? 18 : 32);
           const ringMat = new THREE.MeshBasicMaterial({
             color: color,
             transparent: true,
@@ -3712,7 +3931,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
           scene.add(ring);
 
           const startTime = Date.now();
-          const duration = 600; // 缩短动画时间到600ms
+          const duration = PERF_PROFILE.lowPower ? 420 : 600;
 
           const animateRing = () => {
             const elapsed = Date.now() - startTime;
@@ -4062,7 +4281,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
     // ========== 动画 ==========
     let time = 0;
-    const autoRotateSpeed = 0.0003;  // 自动旋转速度
+    const autoRotateSpeed = PERF_PROFILE.reducedMotion ? 0 : (PERF_PROFILE.lowPower ? 0.0002 : 0.0003);
 
     function animate() {
       requestAnimationFrame(animate);
@@ -4451,34 +4670,43 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
     let lastEventTimestamp = 0;
     let eventPollingActive = false;
-    let eventPollInterval = null;
+    let eventPollTimer = null;
 
     function startEventPolling() {
       if (eventPollingActive) return;
       eventPollingActive = true;
       lastEventTimestamp = Date.now() / 1000;
 
-      eventPollInterval = setInterval(async () => {
+      const poll = async () => {
+        if (!eventPollingActive) return;
         try {
-          const response = await fetch(`/events?since=${lastEventTimestamp}&count=20`);
-          if (!response.ok) return;
-
-          const data = await response.json();
-          if (data.events && data.events.length > 0) {
-            processEvents(data.events);
-            lastEventTimestamp = data.latest_timestamp;
+          if (!document.hidden) {
+            const response = await fetch(`/events?since=${lastEventTimestamp}&count=20`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.events && data.events.length > 0) {
+                processEvents(data.events);
+                lastEventTimestamp = data.latest_timestamp;
+              }
+            }
           }
         } catch (e) {
           // 忽略轮询错误
+        } finally {
+          if (eventPollingActive) {
+            const nextMs = document.hidden ? PERF_PROFILE.eventPollMs * 2 : PERF_PROFILE.eventPollMs;
+            eventPollTimer = setTimeout(poll, nextMs);
+          }
         }
-      }, 800); // 每800ms轮询一次
+      };
+      poll();
     }
 
     function stopEventPolling() {
       eventPollingActive = false;
-      if (eventPollInterval) {
-        clearInterval(eventPollInterval);
-        eventPollInterval = null;
+      if (eventPollTimer) {
+        clearTimeout(eventPollTimer);
+        eventPollTimer = null;
       }
     }
 
@@ -4581,38 +4809,43 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
     // 高亮中心节点
     function highlightCentralNode() {
-      // 让所有节点闪烁一下，表示中心Agent在工作
-      if (sphereGroup) {
-        sphereGroup.children.forEach(child => {
-          if (child.material && child.material.emissive) {
-            const originalColor = child.material.emissive.getHex();
-            child.material.emissive.setHex(0x00ffff);
-            setTimeout(() => {
-              child.material.emissive.setHex(originalColor);
-            }, 500);
-          }
-        });
-      }
+      if (!centralAgentGroup) return;
+      const glow3 = centralAgentGroup.getObjectByName('glow3');
+      if (!glow3 || !glow3.material) return;
+      const originalOpacity = glow3.material.opacity;
+      glow3.material.opacity = Math.min(0.5, originalOpacity + 0.18);
+      setTimeout(() => {
+        glow3.material.opacity = originalOpacity;
+      }, 320);
     }
 
     // 高亮指定Agent节点
     function highlightAgentNode(agentName, color = '#00d4ff') {
       const node = nodesData.find(n => n.name === agentName);
-      if (node && node.mesh) {
-        const originalColor = node.mesh.material.emissive ? node.mesh.material.emissive.getHex() : 0;
-        if (node.mesh.material.emissive) {
-          node.mesh.material.emissive.setHex(parseInt(color.replace('#', '0x')));
-          setTimeout(() => {
-            node.mesh.material.emissive.setHex(originalColor);
-          }, 800);
-        }
-        // 也让节点放大一下
-        const originalScale = node.mesh.scale.x;
-        node.mesh.scale.set(originalScale * 1.5, originalScale * 1.5, originalScale * 1.5);
+      if (!node) return;
+
+      const mesh = nodeMeshes.find(m => m.userData && m.userData.id === node.id);
+      if (!mesh) return;
+
+      const parsedColor = parseInt(String(color).replace('#', ''), 16);
+      if (mesh.children && mesh.children[0] && mesh.children[0].material && Number.isFinite(parsedColor)) {
+        const core = mesh.children[0];
+        const originalColor = core.material.color.getHex();
+        core.material.color.setHex(parsedColor);
         setTimeout(() => {
-          node.mesh.scale.set(originalScale, originalScale, originalScale);
-        }, 600);
+          core.material.color.setHex(originalColor);
+        }, 650);
       }
+
+      const originalScale = mesh.scale.x || 1;
+      mesh.scale.setScalar(originalScale * 1.25);
+      setTimeout(() => {
+        if (!mesh.userData.selected) {
+          mesh.scale.setScalar(1);
+        } else {
+          mesh.scale.setScalar(1.6);
+        }
+      }, 380);
     }
 
     // 闪烁两个Agent之间的连线
@@ -4745,10 +4978,10 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     // 创建学习粒子效果
     function createLearningParticles(agentId) {
       const node = nodesData.find(n => n.id === agentId);
-      if (!node || !node.mesh) return;
+      if (!node || !node.position) return;
 
       // 在节点周围创建粒子
-      const particleCount = 20;
+      const particleCount = PERF_PROFILE.lowPower ? 8 : 20;
       const particles = [];
 
       for (let i = 0; i < particleCount; i++) {

@@ -4,27 +4,188 @@
 核心架构：1个中心质检Agent + N个外围攻击Agent
 """
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 import random
 import time
 
+try:
+    from flask_compress import Compress
+except Exception:  # noqa: BLE001
+    Compress = None
+
 from config import API_CONFIG
-from user_personas import USER_PERSONAS, USER_RELATIONS, COMMUNITY_CONFIG
+from config_store import CONFIG_STORE
+from user_personas import USER_RELATIONS, COMMUNITY_CONFIG
 from rule_engine import RULE_ENGINE
 from attack_knowledge import KNOWLEDGE_STORE
 
 # Import from new modules
 from agents import (
     SYSTEM_STATE, PERSONA_INDEX, EVENT_BUS,
-    CentralInspectorAgent, AttackAgent, CENTRAL_INSPECTOR
+    AttackAgent, CENTRAL_INSPECTOR,
+    get_all_personas, get_technique_library,
+    persist_persona_update, persist_technique_update,
+    reset_peripheral_agents_state, load_agent_runtime,
+    absorb_knowledge_for_all_agents,
+    export_peripheral_agents_state, restore_peripheral_agents_state,
 )
 from battle import (
     run_agent_discussion, run_group_strategy_meeting,
     run_adversarial_battle, run_iterative_optimization,
     run_collaborative_attack
 )
+from orchestrator import CAMPAIGN_ORCHESTRATOR
+from alerting import dispatch_regression_alerts
+from regression_reporting import (
+    evaluate_regression_matrix,
+    normalize_thresholds,
+    render_regression_markdown,
+)
 
 app = Flask(__name__)
+if Compress:
+    app.config["COMPRESS_LEVEL"] = 6
+    app.config["COMPRESS_MIN_SIZE"] = 500
+    app.config["COMPRESS_MIMETYPES"] = [
+        "text/html",
+        "text/css",
+        "application/javascript",
+        "application/json",
+        "text/plain",
+        "text/markdown",
+    ]
+    Compress(app)
+
+
+def _parse_rules_text(rules_text: str) -> list:
+    rules = []
+    for i, line in enumerate([l.strip() for l in (rules_text or "").splitlines() if l.strip()]):
+        rule_id = f"R{i+1:02d}"
+        parts = [p.strip() for p in line.replace("|", " ").split() if p.strip()]
+        keywords = []
+        for part in parts:
+            for token in part.replace("、", ",").split(","):
+                token = token.strip()
+                if token and token not in keywords:
+                    keywords.append(token)
+        rules.append({"id": rule_id, "text": line, "keywords": keywords[:5]})
+    return rules
+
+
+def _apply_rules_runtime(
+    rules: list,
+    *,
+    persist: bool = True,
+    rules_version: int = None,
+    refine: bool = True,
+):
+    if rules_version is None:
+        if persist:
+            SYSTEM_STATE["rules_version"] += 1
+        rules_version = SYSTEM_STATE["rules_version"]
+    else:
+        SYSTEM_STATE["rules_version"] = int(rules_version)
+
+    SYSTEM_STATE["rules"] = rules
+    RULE_ENGINE.set_rules(rules)
+    CENTRAL_INSPECTOR.detection_rules = rules
+
+    if refine:
+        CENTRAL_INSPECTOR.refine_rules(rules)
+        for rule_id, standard in CENTRAL_INSPECTOR.refined_standards.items():
+            refined = standard.get("refined", {})
+            for variant_type in ["text_variants", "semantic_bypass"]:
+                variants_dict = refined.get(variant_type, {})
+                if isinstance(variants_dict, dict):
+                    for _vtype, vlist in variants_dict.items():
+                        if isinstance(vlist, list):
+                            for v in vlist:
+                                if v and len(v) >= 2:
+                                    RULE_ENGINE.add_custom_variants(
+                                        standard.get("original_rule", rule_id), [v]
+                                    )
+    else:
+        CENTRAL_INSPECTOR.refined_standards = {}
+
+    if persist:
+        CONFIG_STORE.save_rules(rules, SYSTEM_STATE["rules_version"])
+
+
+def _bootstrap_runtime_state():
+    """Load persisted rule configuration into in-memory runtime state."""
+    rules, rules_version = CONFIG_STORE.load_rules()
+    _apply_rules_runtime(rules, persist=False, rules_version=rules_version, refine=False)
+
+
+_bootstrap_runtime_state()
+
+
+def _as_bool(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default
+
+
+def _audit(
+    event_type: str,
+    action: str,
+    actor: str = "system",
+    target_type: str = "",
+    target_id: str = "",
+    severity: str = "info",
+    details: dict = None,
+):
+    CONFIG_STORE.create_audit_log(
+        event_type=event_type,
+        action=action,
+        actor=actor,
+        target_type=target_type,
+        target_id=target_id,
+        severity=severity,
+        details=details or {},
+    )
+
+
+def _extract_rules_payload(data: dict):
+    rules = []
+    source_snapshot_id = ""
+
+    rules_text = (data.get("rules_text") or "").strip()
+    if rules_text:
+        return _parse_rules_text(rules_text), source_snapshot_id
+
+    snapshot_id = (data.get("snapshot_id") or "").strip()
+    if snapshot_id:
+        snapshot = CONFIG_STORE.get_rule_snapshot(snapshot_id)
+        if not snapshot:
+            raise ValueError("snapshot不存在")
+        rules = snapshot.get("rules", [])
+        source_snapshot_id = snapshot_id
+        return rules, source_snapshot_id
+
+    incoming = data.get("rules")
+    if isinstance(incoming, list):
+        rules = incoming
+    if not rules:
+        raise ValueError("缺少规则内容，请传rules_text / snapshot_id / rules")
+    return rules, source_snapshot_id
+
+
+@app.after_request
+def apply_response_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if request.path == "/" and response.status_code == 200:
+        response.headers.setdefault("Cache-Control", "public, max-age=120")
+    elif request.path.startswith("/events"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 # ============================================================================
 # API路由
@@ -34,7 +195,7 @@ app = Flask(__name__)
 def index():
     return render_template(
         "index.html",
-        personas=USER_PERSONAS,
+        personas=get_all_personas(),
         relations=USER_RELATIONS,
         provider=API_CONFIG.get("provider", "gemini"),
         community_config=COMMUNITY_CONFIG
@@ -46,42 +207,17 @@ def set_rules():
     """设置审核规则"""
     data = request.json or {}
     rules_text = (data.get("rules_text") or "").strip()
-    
-    # 解析规则
-    rules = []
-    for i, line in enumerate([l.strip() for l in rules_text.splitlines() if l.strip()]):
-        rule_id = f"R{i+1:02d}"
-        parts = [p.strip() for p in line.replace("|", " ").split() if p.strip()]
-        keywords = []
-        for part in parts:
-            for token in part.replace("、", ",").split(","):
-                token = token.strip()
-                if token and token not in keywords:
-                    keywords.append(token)
-        rules.append({"id": rule_id, "text": line, "keywords": keywords[:5]})
-    
-    SYSTEM_STATE["rules"] = rules
-    SYSTEM_STATE["rules_version"] += 1
-    
-    # 同步到独立规则引擎
-    RULE_ENGINE.set_rules(rules)
-    
-    # 中心Agent拆解规则（LLM增强，可选）
-    CENTRAL_INSPECTOR.refine_rules(rules)
-    
-    # 将LLM拆解出的变体也同步到规则引擎的自定义词库
-    for rule_id, standard in CENTRAL_INSPECTOR.refined_standards.items():
-        refined = standard.get("refined", {})
-        for variant_type in ["text_variants", "semantic_bypass"]:
-            variants_dict = refined.get(variant_type, {})
-            if isinstance(variants_dict, dict):
-                for vtype, vlist in variants_dict.items():
-                    if isinstance(vlist, list):
-                        for v in vlist:
-                            if v and len(v) >= 2:
-                                RULE_ENGINE.add_custom_variants(
-                                    standard.get("original_rule", rule_id), [v]
-                                )
+    actor = (data.get("actor") or "api").strip()
+    rules = _parse_rules_text(rules_text)
+    _apply_rules_runtime(rules, persist=True, refine=True)
+    _audit(
+        event_type="rule_update",
+        action="set_rules",
+        actor=actor,
+        target_type="rules_state",
+        target_id=f"v{SYSTEM_STATE['rules_version']}",
+        details={"rules_count": len(rules)},
+    )
     
     return jsonify({
         "status": "ok",
@@ -99,6 +235,301 @@ def get_rules():
         "rules_count": len(SYSTEM_STATE["rules"]),
         "rules_version": SYSTEM_STATE["rules_version"],
         "refined_standards": CENTRAL_INSPECTOR.refined_standards,  # 包含详细拆解
+    })
+
+
+@app.post("/rules/snapshots")
+def create_rule_snapshot():
+    """创建规则快照，用于回归和A/B测试。"""
+    data = request.json or {}
+    name = (data.get("name") or f"rules-v{SYSTEM_STATE.get('rules_version', 0)}").strip()
+    metadata = data.get("metadata") or {}
+    actor = (data.get("actor") or "api").strip()
+
+    rules_text = (data.get("rules_text") or "").strip()
+    if rules_text:
+        rules = _parse_rules_text(rules_text)
+        version = int(data.get("rules_version") or SYSTEM_STATE.get("rules_version", 0) + 1)
+    else:
+        rules = SYSTEM_STATE.get("rules", [])
+        version = SYSTEM_STATE.get("rules_version", 0)
+
+    snapshot_id = CONFIG_STORE.create_rule_snapshot(
+        name=name,
+        rules=rules,
+        rules_version=version,
+        metadata=metadata,
+    )
+    _audit(
+        event_type="rule_snapshot",
+        action="create_snapshot",
+        actor=actor,
+        target_type="rule_snapshot",
+        target_id=snapshot_id,
+        details={"rules_count": len(rules), "rules_version": version},
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "snapshot_id": snapshot_id,
+            "name": name,
+            "rules_count": len(rules),
+            "rules_version": version,
+        }
+    )
+
+
+@app.get("/rules/snapshots")
+def list_rule_snapshots():
+    """列出规则快照。"""
+    limit = request.args.get("limit", 50, type=int)
+    return jsonify({"snapshots": CONFIG_STORE.list_rule_snapshots(limit=limit)})
+
+
+@app.post("/rules/snapshots/<snapshot_id>/apply")
+def apply_rule_snapshot(snapshot_id: str):
+    """应用规则快照到当前系统。"""
+    snapshot = CONFIG_STORE.get_rule_snapshot(snapshot_id)
+    if not snapshot:
+        return jsonify({"error": "snapshot not found"}), 404
+
+    _apply_rules_runtime(
+        snapshot.get("rules", []),
+        persist=True,
+        rules_version=snapshot.get("rules_version", SYSTEM_STATE.get("rules_version", 0)),
+        refine=True,
+    )
+    _audit(
+        event_type="rule_snapshot",
+        action="apply_snapshot",
+        actor=(request.json or {}).get("actor", "api"),
+        target_type="rule_snapshot",
+        target_id=snapshot_id,
+        details={"rules_count": len(snapshot.get("rules", [])), "rules_version": SYSTEM_STATE.get("rules_version", 0)},
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "snapshot_id": snapshot_id,
+            "rules_count": len(snapshot.get("rules", [])),
+            "rules_version": SYSTEM_STATE.get("rules_version", 0),
+        }
+    )
+
+
+@app.post("/rules/change-requests")
+def create_rule_change_request():
+    """创建规则变更申请（待审批）。"""
+    data = request.json or {}
+    title = (data.get("title") or f"rule-change-{int(time.time())}").strip()
+    description = (data.get("description") or "").strip()
+    proposer = (data.get("proposer") or "operator").strip()
+    risk_level = (data.get("risk_level") or "medium").strip()
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+
+    try:
+        rules, source_snapshot_id = _extract_rules_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    suggested_version = int(
+        data.get("proposed_rules_version") or max(1, SYSTEM_STATE.get("rules_version", 0) + 1)
+    )
+    request_id = CONFIG_STORE.create_rule_change_request(
+        title=title,
+        proposer=proposer,
+        proposed_rules=rules,
+        proposed_rules_version=suggested_version,
+        description=description,
+        source_snapshot_id=source_snapshot_id,
+        risk_level=risk_level,
+        metadata=metadata,
+    )
+    _audit(
+        event_type="rule_change_request",
+        action="create",
+        actor=proposer,
+        target_type="rule_change_request",
+        target_id=request_id,
+        details={
+            "risk_level": risk_level,
+            "rules_count": len(rules),
+            "proposed_rules_version": suggested_version,
+            "source_snapshot_id": source_snapshot_id,
+        },
+    )
+    EVENT_BUS.emit(
+        "rule_change_requested",
+        {"request_id": request_id, "title": title, "proposer": proposer, "risk_level": risk_level},
+    )
+    item = CONFIG_STORE.get_rule_change_request(request_id)
+    return jsonify({"status": "pending", "request": item}), 201
+
+
+@app.get("/rules/change-requests")
+def list_rule_change_requests():
+    """列出规则变更申请。"""
+    status = (request.args.get("status") or "").strip()
+    limit = request.args.get("limit", 50, type=int)
+    return jsonify({"requests": CONFIG_STORE.list_rule_change_requests(status=status, limit=limit)})
+
+
+@app.get("/rules/change-requests/<request_id>")
+def get_rule_change_request(request_id: str):
+    """查看单个规则变更申请。"""
+    item = CONFIG_STORE.get_rule_change_request(request_id)
+    if not item:
+        return jsonify({"error": "request not found"}), 404
+    return jsonify(item)
+
+
+@app.post("/rules/change-requests/<request_id>/review")
+def review_rule_change_request(request_id: str):
+    """审批规则变更申请（approved / rejected）。"""
+    data = request.json or {}
+    decision = (data.get("decision") or data.get("status") or "").strip().lower()
+    reviewer = (data.get("reviewer") or "reviewer").strip()
+    comment = (data.get("comment") or "").strip()
+    if decision not in {"approved", "rejected"}:
+        return jsonify({"error": "decision必须是approved或rejected"}), 400
+
+    try:
+        item = CONFIG_STORE.review_rule_change_request(
+            request_id=request_id,
+            decision=decision,
+            reviewer=reviewer,
+            comment=comment,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if not item:
+        return jsonify({"error": "request not found"}), 404
+
+    _audit(
+        event_type="rule_change_request",
+        action=f"review:{decision}",
+        actor=reviewer,
+        target_type="rule_change_request",
+        target_id=request_id,
+        details={"comment": comment},
+        severity="warning" if decision == "rejected" else "info",
+    )
+    EVENT_BUS.emit(
+        "rule_change_reviewed",
+        {
+            "request_id": request_id,
+            "decision": decision,
+            "reviewer": reviewer,
+            "comment": comment,
+        },
+    )
+    return jsonify({"status": decision, "request": item})
+
+
+@app.post("/rules/change-requests/<request_id>/apply")
+def apply_rule_change_request(request_id: str):
+    """应用已审批的规则变更。"""
+    data = request.json or {}
+    actor = (data.get("actor") or "operator").strip()
+    comment = (data.get("comment") or "").strip()
+    allow_force = _as_bool(data.get("force"), False)
+
+    item = CONFIG_STORE.get_rule_change_request(request_id)
+    if not item:
+        return jsonify({"error": "request not found"}), 404
+
+    status = item.get("status")
+    if status not in {"approved", "applied"} and not allow_force:
+        return jsonify({"error": "request未审批，需先approved或force=true"}), 400
+
+    proposed_rules = item.get("proposed_rules", [])
+    if not isinstance(proposed_rules, list) or not proposed_rules:
+        return jsonify({"error": "request中没有可应用的规则"}), 400
+
+    target_version = int(item.get("proposed_rules_version") or 0)
+    if target_version <= SYSTEM_STATE.get("rules_version", 0):
+        target_version = int(SYSTEM_STATE.get("rules_version", 0) + 1)
+
+    _apply_rules_runtime(
+        proposed_rules,
+        persist=True,
+        rules_version=target_version,
+        refine=True,
+    )
+    updated = CONFIG_STORE.mark_rule_change_request_applied(
+        request_id=request_id,
+        actor=actor,
+        comment=comment or f"applied by {actor}",
+    )
+    _audit(
+        event_type="rule_change_request",
+        action="apply",
+        actor=actor,
+        target_type="rule_change_request",
+        target_id=request_id,
+        details={
+            "rules_count": len(proposed_rules),
+            "rules_version": SYSTEM_STATE.get("rules_version", 0),
+            "force": allow_force,
+        },
+    )
+    EVENT_BUS.emit(
+        "rule_change_applied",
+        {
+            "request_id": request_id,
+            "actor": actor,
+            "rules_version": SYSTEM_STATE.get("rules_version", 0),
+            "rules_count": len(proposed_rules),
+        },
+    )
+    return jsonify(
+        {
+            "status": "applied",
+            "request": updated or item,
+            "rules_version": SYSTEM_STATE.get("rules_version", 0),
+            "rules_count": len(SYSTEM_STATE.get("rules", [])),
+        }
+    )
+
+
+@app.get("/techniques")
+def list_techniques():
+    """获取当前攻击技法库（来自持久化配置）"""
+    techniques = []
+    for category, items in get_technique_library().items():
+        for name, details in items.items():
+            item = {
+                "name": name,
+                "category": category,
+            }
+            if isinstance(details, dict):
+                item.update(details)
+            techniques.append(item)
+
+    return jsonify({
+        "techniques": techniques,
+        "total_count": len(techniques),
+    })
+
+
+@app.post("/techniques")
+def upsert_technique():
+    """新增或更新攻击技法定义"""
+    data = request.json or {}
+    category = (data.get("category") or "").strip()
+    name = (data.get("name") or "").strip()
+    if not category or not name:
+        return jsonify({"error": "缺少category或name"}), 400
+
+    details = {k: v for k, v in data.items() if k not in {"category", "name"}}
+    persist_technique_update(category=category, name=name, details=details)
+
+    total_count = sum(len(v) for v in get_technique_library().values())
+    return jsonify({
+        "status": "ok",
+        "message": f"技法 {name} 已保存",
+        "total_count": total_count,
     })
 
 
@@ -174,13 +605,56 @@ def get_agent_state(persona_id: str):
         return jsonify({"error": "Agent不存在"}), 404
     
     agent = AttackAgent(persona)
-    agent_state = SYSTEM_STATE["peripheral_agents"].get(persona_id, {})
-    agent.learned_techniques = agent_state.get("learned_techniques", [])
-    agent.success_count = agent_state.get("success_count", 0)
-    agent.fail_count = agent_state.get("fail_count", 0)
-    agent.evolution_level = agent_state.get("evolution_level", 1)
+    load_agent_runtime(agent)
     
     return jsonify(agent.get_state())
+
+
+@app.get("/agent/<persona_id>/techniques/unlocked")
+def get_agent_unlocked_techniques(persona_id: str):
+    """查看Agent当前已解锁技法（按能力阶段）。"""
+    persona = PERSONA_INDEX.get(persona_id)
+    if not persona:
+        return jsonify({"error": "Agent不存在"}), 404
+
+    agent = AttackAgent(persona)
+    load_agent_runtime(agent)
+    profile = agent.get_technique_profile()
+
+    detail_map = {}
+    for category, items in get_technique_library().items():
+        if not isinstance(items, dict):
+            continue
+        for name, meta in items.items():
+            detail_map[name] = {"category": category, **(meta if isinstance(meta, dict) else {})}
+
+    ordered = []
+    for item in profile.get("ordered", []):
+        name = item.get("name")
+        detail = detail_map.get(name, {})
+        ordered.append(
+            {
+                "name": name,
+                "category": item.get("category", detail.get("category", "")),
+                "min_level": item.get("min_level", detail.get("difficulty", 1)),
+                "score": item.get("score", 0),
+                "desc": detail.get("desc", ""),
+                "difficulty": detail.get("difficulty", item.get("min_level", 1)),
+            }
+        )
+
+    return jsonify(
+        {
+            "persona_id": persona_id,
+            "name": persona.get("name", ""),
+            "effective_level": profile.get("effective_level", 1),
+            "capability_score": round(agent.capability_score, 3),
+            "knowledge_depth": agent.knowledge_depth,
+            "unlocked_count": len(profile.get("unlocked", [])),
+            "advanced_count": len(profile.get("advanced", [])),
+            "techniques": ordered,
+        }
+    )
 
 
 @app.post("/agent/<persona_id>/config")
@@ -204,12 +678,8 @@ def update_agent_config(persona_id: str):
     for field in updateable_fields:
         if field in config:
             persona[field] = config[field]
-    
-    # 同时更新USER_PERSONAS中的数据
-    for i, p in enumerate(USER_PERSONAS):
-        if p["id"] == persona_id:
-            USER_PERSONAS[i] = persona
-            break
+
+    persist_persona_update(persona)
     
     return jsonify({
         "success": True,
@@ -218,17 +688,59 @@ def update_agent_config(persona_id: str):
     })
 
 
+@app.get("/agents/progression")
+def get_agents_progression():
+    """查看全体Agent进化看板。"""
+    states = []
+    for persona in get_all_personas():
+        agent = AttackAgent(persona)
+        load_agent_runtime(agent)
+        profile = agent.get_technique_profile()
+        states.append(
+            {
+                "persona_id": persona.get("id", ""),
+                "name": persona.get("name", ""),
+                "category": persona.get("category", ""),
+                "evolution_level": agent.evolution_level,
+                "effective_level": profile.get("effective_level", 1),
+                "capability_score": round(agent.capability_score, 3),
+                "knowledge_depth": agent.knowledge_depth,
+                "learning_points": agent.learning_points,
+                "learned_techniques_count": len(agent.learned_techniques),
+                "unlocked_techniques_count": len(profile.get("unlocked", [])),
+                "advanced_techniques_count": len(profile.get("advanced", [])),
+            }
+        )
+
+    states.sort(
+        key=lambda x: (
+            -x.get("effective_level", 0),
+            -x.get("capability_score", 0),
+            -x.get("knowledge_depth", 0),
+        )
+    )
+
+    by_level = {}
+    for item in states:
+        level_key = str(item.get("effective_level", 1))
+        by_level[level_key] = by_level.get(level_key, 0) + 1
+
+    return jsonify(
+        {
+            "agents": states,
+            "total_agents": len(states),
+            "distribution_by_effective_level": by_level,
+        }
+    )
+
+
 @app.get("/agents/states")
 def get_all_agent_states():
     """获取所有外围Agent状态"""
     states = []
-    for persona in USER_PERSONAS:
+    for persona in get_all_personas():
         agent = AttackAgent(persona)
-        agent_state = SYSTEM_STATE["peripheral_agents"].get(persona["id"], {})
-        agent.learned_techniques = agent_state.get("learned_techniques", [])
-        agent.success_count = agent_state.get("success_count", 0)
-        agent.fail_count = agent_state.get("fail_count", 0)
-        agent.evolution_level = agent_state.get("evolution_level", 1)
+        load_agent_runtime(agent)
         states.append(agent.get_state())
     
     return jsonify({
@@ -297,19 +809,11 @@ def reset_system():
         "by_technique": {},
         "by_keyword": {},
     }
-    SYSTEM_STATE["peripheral_agents"] = {
-        p["id"]: {
-            "persona": p,
-            "learned_techniques": [],
-            "success_count": 0,
-            "fail_count": 0,
-            "evolution_level": 1,
-            "last_strategy": None,
-        } for p in USER_PERSONAS
-    }
+    reset_peripheral_agents_state()
     SYSTEM_STATE["battle_history"] = []
     SYSTEM_STATE["rules"] = []
     SYSTEM_STATE["rules_version"] = 0
+    CONFIG_STORE.clear_rules()
     
     CENTRAL_INSPECTOR.reset_stats()
     CENTRAL_INSPECTOR.detection_rules = []
@@ -317,7 +821,7 @@ def reset_system():
     RULE_ENGINE.reset_stats()
     RULE_ENGINE.set_rules([])
     RULE_ENGINE.custom_variants = {}
-    KNOWLEDGE_STORE.dlear()
+    KNOWLEDGE_STORE.clear()
     
     return jsonify({"status": "reset", "message": "系统已重置"})
 
@@ -338,6 +842,15 @@ def feed_knowledge():
     feed_type = data.get("type", "materials")  # materials / slang / cases
     content = data.get("content", "")
     items = data.get("items", [])
+    source = (data.get("source") or "manual").strip()
+    category = (data.get("category") or "通用").strip()
+    tags_raw = data.get("tags", [])
+    if isinstance(tags_raw, str):
+        tags = [t.strip() for t in tags_raw.replace("，", ",").split(",") if t.strip()]
+    elif isinstance(tags_raw, list):
+        tags = [str(t).strip() for t in tags_raw if str(t).strip()]
+    else:
+        tags = []
     
     result = {"fed_count": 0, "type": feed_type}
     
@@ -347,7 +860,12 @@ def feed_knowledge():
             texts = [line.strip() for line in content.splitlines() if line.strip()]
         else:
             texts = items
-        count = KNOWLEDGE_STORE.feed_materials(texts, data.get("category", "通用"))
+        count = KNOWLEDGE_STORE.feed_materials(
+            texts,
+            category=category,
+            source=source,
+            tags=tags,
+        )
         result["fed_count"] = count
     
     elif feed_type == "slang":
@@ -356,7 +874,7 @@ def feed_knowledge():
             entries = [line.strip() for line in content.splitlines() if line.strip()]
         else:
             entries = items
-        count = KNOWLEDGE_STORE.feed_slang(entries)
+        count = KNOWLEDGE_STORE.feed_slang(entries, source=source, tags=tags)
         result["fed_count"] = count
         
         # 黑话同时加入规则引擎的自定义变体
@@ -370,13 +888,24 @@ def feed_knowledge():
     elif feed_type == "cases":
         # 绕过案例
         if isinstance(items, list):
-            count = KNOWLEDGE_STORE.feed_cases(items)
+            count = KNOWLEDGE_STORE.feed_cases(items, source=source, tags=tags)
             result["fed_count"] = count
+
+    # 投喂后触发全体攻击体能力吸收
+    absorb_knowledge_for_all_agents(
+        feed_type=feed_type,
+        item_count=result["fed_count"],
+        category=category,
+        tags=tags,
+    )
     
     # 发送事件
     EVENT_BUS.emit("knowledge_fed", {
         "type": feed_type,
         "count": result["fed_count"],
+        "source": source,
+        "category": category,
+        "tags": tags,
         "message": f"投喂了{result['fed_count']}条{feed_type}资料"
     })
     
@@ -388,7 +917,12 @@ def feed_knowledge():
 @app.get("/knowledge/list")
 def list_knowledge():
     """查看已投喂资料"""
-    return jsonify(KNOWLEDGE_STORE.get_summary())
+    limit = request.args.get("limit", 100, type=int)
+    include_items = request.args.get("include_items", 0, type=int) == 1
+    summary = KNOWLEDGE_STORE.get_summary()
+    if include_items:
+        summary["items"] = CONFIG_STORE.list_knowledge_items(limit=limit)
+    return jsonify(summary)
 
 
 @app.post("/knowledge/clear")
@@ -402,6 +936,587 @@ def clear_knowledge():
 def get_rule_engine_stats():
     """获取规则引擎统计（按层统计）"""
     return jsonify(RULE_ENGINE.get_stats())
+
+
+# ============================================================================
+# 企业编排与结果仓 API
+# ============================================================================
+
+@app.post("/campaigns/run")
+def run_campaign():
+    """运行企业级战役编排（基线 + 进化阶段）"""
+    data = request.json or {}
+    name = (data.get("name") or f"campaign-{int(time.time())}").strip()
+    scenario = (data.get("scenario") or "general").strip()
+    persona_ids = data.get("persona_ids") or []
+    target_keywords = data.get("target_keywords") or []
+    baseline_rounds = data.get("baseline_rounds", 1)
+    adversarial_rounds = data.get("adversarial_rounds", 1)
+    enable_peer_learning = bool(data.get("enable_peer_learning", True))
+    random_seed = data.get("random_seed")
+
+    try:
+        result = CAMPAIGN_ORCHESTRATOR.run_campaign(
+            name=name,
+            scenario=scenario,
+            persona_ids=persona_ids,
+            target_keywords=target_keywords,
+            baseline_rounds=baseline_rounds,
+            adversarial_rounds=adversarial_rounds,
+            enable_peer_learning=enable_peer_learning,
+            random_seed=random_seed,
+        )
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"campaign execution failed: {exc}"}), 500
+
+
+@app.get("/campaigns")
+def list_campaigns():
+    """列出历史战役"""
+    limit = request.args.get("limit", 20, type=int)
+    return jsonify({"campaigns": CAMPAIGN_ORCHESTRATOR.list_campaigns(limit=limit)})
+
+
+@app.get("/campaigns/<campaign_id>")
+def get_campaign(campaign_id: str):
+    """查看单个战役详情"""
+    campaign = CONFIG_STORE.get_campaign(campaign_id)
+    if not campaign:
+        return jsonify({"error": "campaign not found"}), 404
+    return jsonify(campaign)
+
+
+@app.get("/campaigns/<campaign_id>/replay")
+def replay_campaign(campaign_id: str):
+    """按战役回放攻防记录"""
+    phase = (request.args.get("phase") or "").strip()
+    limit = request.args.get("limit", 5000, type=int)
+    result = CAMPAIGN_ORCHESTRATOR.replay_campaign(
+        campaign_id=campaign_id,
+        phase=phase,
+        limit=limit,
+    )
+    if "error" in result:
+        return jsonify(result), 404
+    return jsonify(result)
+
+
+@app.post("/campaigns/compare")
+def compare_campaigns():
+    """跨战役效果对比"""
+    data = request.json or {}
+    campaign_ids = data.get("campaign_ids") or []
+    if not isinstance(campaign_ids, list) or len(campaign_ids) < 2:
+        return jsonify({"error": "campaign_ids 至少传入2个"}), 400
+    return jsonify(CAMPAIGN_ORCHESTRATOR.compare_campaigns(campaign_ids))
+
+
+@app.post("/campaigns/ab-run")
+def run_ab_campaign():
+    """
+    基于规则快照执行A/B对比回归。
+    两个快照使用相同Agent起点、相同编排参数，便于横向比较。
+    """
+    data = request.json or {}
+    snapshot_a_id = (data.get("snapshot_a_id") or "").strip()
+    snapshot_b_id = (data.get("snapshot_b_id") or "").strip()
+    if not snapshot_a_id or not snapshot_b_id:
+        return jsonify({"error": "缺少snapshot_a_id或snapshot_b_id"}), 400
+
+    snapshot_a = CONFIG_STORE.get_rule_snapshot(snapshot_a_id)
+    snapshot_b = CONFIG_STORE.get_rule_snapshot(snapshot_b_id)
+    if not snapshot_a or not snapshot_b:
+        return jsonify({"error": "snapshot不存在"}), 404
+
+    scenario = (data.get("scenario") or "ab-regression").strip()
+    name = (data.get("name") or f"ab-{int(time.time())}").strip()
+    baseline_rounds = data.get("baseline_rounds", 1)
+    adversarial_rounds = data.get("adversarial_rounds", 1)
+    enable_peer_learning = bool(data.get("enable_peer_learning", True))
+    persona_ids = data.get("persona_ids") or []
+    target_keywords = data.get("target_keywords") or []
+    random_seed = data.get("random_seed")
+    if random_seed is None:
+        random_seed = int(time.time())
+
+    original_rules = list(SYSTEM_STATE.get("rules", []))
+    original_rules_version = int(SYSTEM_STATE.get("rules_version", 0))
+    original_state = export_peripheral_agents_state()
+
+    try:
+        # 保证A/B从同一能力起点开始
+        reset_peripheral_agents_state()
+        ab_initial_state = export_peripheral_agents_state()
+
+        _apply_rules_runtime(
+            snapshot_a.get("rules", []),
+            persist=False,
+            rules_version=snapshot_a.get("rules_version", original_rules_version),
+            refine=False,
+        )
+        restore_peripheral_agents_state(ab_initial_state)
+        run_a = CAMPAIGN_ORCHESTRATOR.run_campaign(
+            name=f"{name}-A",
+            scenario=f"{scenario}:A",
+            persona_ids=persona_ids,
+            target_keywords=target_keywords,
+            baseline_rounds=baseline_rounds,
+            adversarial_rounds=adversarial_rounds,
+            enable_peer_learning=enable_peer_learning,
+            random_seed=random_seed,
+        )
+
+        _apply_rules_runtime(
+            snapshot_b.get("rules", []),
+            persist=False,
+            rules_version=snapshot_b.get("rules_version", original_rules_version),
+            refine=False,
+        )
+        restore_peripheral_agents_state(ab_initial_state)
+        run_b = CAMPAIGN_ORCHESTRATOR.run_campaign(
+            name=f"{name}-B",
+            scenario=f"{scenario}:B",
+            persona_ids=persona_ids,
+            target_keywords=target_keywords,
+            baseline_rounds=baseline_rounds,
+            adversarial_rounds=adversarial_rounds,
+            enable_peer_learning=enable_peer_learning,
+            random_seed=random_seed,
+        )
+
+        comparison = CAMPAIGN_ORCHESTRATOR.compare_campaigns(
+            [run_a.get("campaign_id"), run_b.get("campaign_id")]
+        )
+        delta = comparison.get("comparison", [])
+        delta_item = delta[0] if delta else {}
+
+        summary_a = run_a.get("summary", {})
+        summary_b = run_b.get("summary", {})
+        score_a = summary_a.get("adversarial_detection_rate", 0) - summary_a.get("degradation", 0)
+        score_b = summary_b.get("adversarial_detection_rate", 0) - summary_b.get("degradation", 0)
+        winner = "A" if score_a > score_b else "B" if score_b > score_a else "tie"
+
+        return jsonify(
+            {
+                "status": "completed",
+                "snapshot_a_id": snapshot_a_id,
+                "snapshot_b_id": snapshot_b_id,
+                "campaign_a_id": run_a.get("campaign_id"),
+                "campaign_b_id": run_b.get("campaign_id"),
+                "summary_a": summary_a,
+                "summary_b": summary_b,
+                "delta": delta_item,
+                "winner": winner,
+                "random_seed": random_seed,
+            }
+        )
+    finally:
+        restore_peripheral_agents_state(original_state)
+        _apply_rules_runtime(
+            original_rules,
+            persist=False,
+            rules_version=original_rules_version,
+            refine=False,
+        )
+
+
+@app.post("/regressions/run")
+def run_regression_matrix():
+    """
+    对多个规则快照执行同参数批量回归。
+    适合后续挂自动化定时任务。
+    """
+    data = request.json or {}
+    actor = (data.get("actor") or "system").strip()
+    snapshot_ids = data.get("snapshot_ids") or []
+    if not isinstance(snapshot_ids, list) or len(snapshot_ids) == 0:
+        return jsonify({"error": "snapshot_ids不能为空"}), 400
+
+    scenario = (data.get("scenario") or "matrix-regression").strip()
+    baseline_rounds = data.get("baseline_rounds", 1)
+    adversarial_rounds = data.get("adversarial_rounds", 1)
+    enable_peer_learning = bool(data.get("enable_peer_learning", True))
+    persona_ids = data.get("persona_ids") or []
+    target_keywords = data.get("target_keywords") or []
+    threshold_input = data.get("alert_thresholds") or {}
+    thresholds = normalize_thresholds(threshold_input)
+    persist_report = _as_bool(data.get("persist_report"), True)
+    include_markdown = _as_bool(data.get("include_markdown"), True)
+    dispatch_alerts_enabled = _as_bool(data.get("dispatch_alerts"), True)
+    alert_channel_ids = data.get("alert_channel_ids") or []
+    if not isinstance(alert_channel_ids, list):
+        alert_channel_ids = []
+    report_name = (data.get("report_name") or f"{scenario}-{int(time.time())}").strip()
+    random_seed = data.get("random_seed")
+    if random_seed is None:
+        random_seed = int(time.time())
+
+    snapshots = []
+    for sid in snapshot_ids:
+        snapshot = CONFIG_STORE.get_rule_snapshot(str(sid).strip())
+        if snapshot:
+            snapshots.append(snapshot)
+    if not snapshots:
+        return jsonify({"error": "未找到有效快照"}), 404
+
+    original_rules = list(SYSTEM_STATE.get("rules", []))
+    original_rules_version = int(SYSTEM_STATE.get("rules_version", 0))
+    original_state = export_peripheral_agents_state()
+
+    results = []
+    comparisons = []
+    matrix_result = {}
+    try:
+        reset_peripheral_agents_state()
+        matrix_initial_state = export_peripheral_agents_state()
+
+        for idx, snapshot in enumerate(snapshots):
+            _apply_rules_runtime(
+                snapshot.get("rules", []),
+                persist=False,
+                rules_version=snapshot.get("rules_version", original_rules_version),
+                refine=False,
+            )
+            restore_peripheral_agents_state(matrix_initial_state)
+
+            run_result = CAMPAIGN_ORCHESTRATOR.run_campaign(
+                name=f"{scenario}-{snapshot.get('name', snapshot.get('snapshot_id'))}",
+                scenario=f"{scenario}:{snapshot.get('snapshot_id')}",
+                persona_ids=persona_ids,
+                target_keywords=target_keywords,
+                baseline_rounds=baseline_rounds,
+                adversarial_rounds=adversarial_rounds,
+                enable_peer_learning=enable_peer_learning,
+                random_seed=int(random_seed) + idx,
+            )
+            results.append(
+                {
+                    "snapshot_id": snapshot.get("snapshot_id"),
+                    "snapshot_name": snapshot.get("name"),
+                    "campaign_id": run_result.get("campaign_id"),
+                    "summary": run_result.get("summary", {}),
+                }
+            )
+
+        if len(results) >= 2:
+            base_campaign = results[0].get("campaign_id")
+            for item in results[1:]:
+                cmp_result = CAMPAIGN_ORCHESTRATOR.compare_campaigns(
+                    [base_campaign, item.get("campaign_id")]
+                )
+                delta = cmp_result.get("comparison", [])
+                if delta:
+                    comparisons.append(
+                        {
+                            "base_snapshot_id": results[0].get("snapshot_id"),
+                            "target_snapshot_id": item.get("snapshot_id"),
+                            "delta": delta[0],
+                        }
+                    )
+
+        matrix_result = {
+            "status": "completed",
+            "scenario": scenario,
+            "random_seed": random_seed,
+            "runs": results,
+            "comparisons": comparisons,
+        }
+
+        evaluation = evaluate_regression_matrix(matrix_result, thresholds=thresholds)
+        markdown = render_regression_markdown(
+            name=report_name,
+            scenario=scenario,
+            matrix_result=matrix_result,
+            evaluation=evaluation,
+        )
+
+        report_id = None
+        if persist_report:
+            report_payload = {
+                "matrix_result": matrix_result,
+                "evaluation": evaluation,
+            }
+            report_id = CONFIG_STORE.create_regression_report(
+                name=report_name,
+                scenario=scenario,
+                status=evaluation.get("status", "ok"),
+                thresholds=evaluation.get("thresholds", thresholds),
+                payload=report_payload,
+                markdown=markdown,
+            )
+
+        dispatch_result = None
+        if dispatch_alerts_enabled and int(evaluation.get("alert_count", 0) or 0) > 0:
+            dispatch_result = dispatch_regression_alerts(
+                evaluation=evaluation,
+                scenario=scenario,
+                source_id=report_id or f"regression-{int(time.time())}",
+                event_emitter=EVENT_BUS.emit,
+                channel_ids=alert_channel_ids,
+            )
+
+        level = (evaluation.get("status") or "ok").lower()
+        severity = "critical" if level == "critical" else "warning" if level == "warning" else "info"
+        _audit(
+            event_type="regression_run",
+            action="matrix_run",
+            actor=actor,
+            target_type="regression_report",
+            target_id=report_id or "",
+            severity=severity,
+            details={
+                "scenario": scenario,
+                "snapshot_ids": [item.get("snapshot_id") for item in results],
+                "status": level,
+                "alert_count": int(evaluation.get("alert_count", 0) or 0),
+                "dispatch_alerts": dispatch_alerts_enabled,
+                "selected_channels": alert_channel_ids,
+            },
+        )
+
+        response = {
+            **matrix_result,
+            "evaluation": evaluation,
+            "report_id": report_id,
+            "thresholds": thresholds,
+            "alert_dispatch": dispatch_result,
+        }
+        if include_markdown:
+            response["report_markdown"] = markdown
+        return jsonify(response)
+    finally:
+        restore_peripheral_agents_state(original_state)
+        _apply_rules_runtime(
+            original_rules,
+            persist=False,
+            rules_version=original_rules_version,
+            refine=False,
+        )
+
+
+@app.get("/regressions/reports")
+def list_regression_reports():
+    """查看历史回归报告。"""
+    limit = request.args.get("limit", 50, type=int)
+    return jsonify({"reports": CONFIG_STORE.list_regression_reports(limit=limit)})
+
+
+@app.get("/regressions/reports/<report_id>")
+def get_regression_report(report_id: str):
+    """查看单个回归报告详情。"""
+    report = CONFIG_STORE.get_regression_report(report_id)
+    if not report:
+        return jsonify({"error": "report not found"}), 404
+    return jsonify(report)
+
+
+@app.get("/regressions/reports/<report_id>/markdown")
+def get_regression_report_markdown(report_id: str):
+    """获取回归报告Markdown。"""
+    report = CONFIG_STORE.get_regression_report(report_id)
+    if not report:
+        return jsonify({"error": "report not found"}), 404
+    return Response(report.get("markdown", ""), mimetype="text/markdown; charset=utf-8")
+
+
+@app.post("/regressions/reports/<report_id>/dispatch-alerts")
+def dispatch_report_alerts(report_id: str):
+    """按报告重新触发告警分发。"""
+    report = CONFIG_STORE.get_regression_report(report_id)
+    if not report:
+        return jsonify({"error": "report not found"}), 404
+
+    payload = report.get("payload", {}) if isinstance(report.get("payload"), dict) else {}
+    evaluation = payload.get("evaluation", {}) if isinstance(payload, dict) else {}
+    if not evaluation:
+        return jsonify({"error": "report payload missing evaluation"}), 400
+
+    data = request.json or {}
+    actor = (data.get("actor") or "operator").strip()
+    channel_ids = data.get("alert_channel_ids") or []
+    if not isinstance(channel_ids, list):
+        channel_ids = []
+
+    dispatch_result = dispatch_regression_alerts(
+        evaluation=evaluation,
+        scenario=report.get("scenario", "regression"),
+        source_id=report_id,
+        event_emitter=EVENT_BUS.emit,
+        channel_ids=channel_ids,
+    )
+    _audit(
+        event_type="alert_dispatch",
+        action="dispatch_report_alerts",
+        actor=actor,
+        target_type="regression_report",
+        target_id=report_id,
+        severity="warning" if int(evaluation.get("alert_count", 0) or 0) > 0 else "info",
+        details={
+            "scenario": report.get("scenario"),
+            "status": evaluation.get("status"),
+            "alert_count": int(evaluation.get("alert_count", 0) or 0),
+            "channel_ids": channel_ids,
+            "dispatch_summary": dispatch_result.get("summary", {}),
+        },
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "report_id": report_id,
+            "dispatch": dispatch_result,
+        }
+    )
+
+
+@app.get("/alerts/channels")
+def list_alert_channels():
+    """查看告警通道配置。"""
+    include_disabled = request.args.get("include_disabled", 0, type=int) == 1
+    return jsonify({"channels": CONFIG_STORE.list_alert_channels(include_disabled=include_disabled)})
+
+
+@app.post("/alerts/channels")
+def upsert_alert_channel():
+    """新增或更新告警通道。"""
+    data = request.json or {}
+    actor = (data.get("actor") or "operator").strip()
+    channel_id = (data.get("channel_id") or "").strip()
+    name = (data.get("name") or "").strip()
+    channel_type = (data.get("channel_type") or "event_bus").strip().lower()
+    endpoint = (data.get("endpoint") or "").strip()
+    min_severity = (data.get("min_severity") or "warning").strip().lower()
+    enabled = _as_bool(data.get("enabled"), True)
+    config = data.get("config") if isinstance(data.get("config"), dict) else {}
+
+    if channel_type not in {"event_bus", "stdout", "webhook"}:
+        return jsonify({"error": "channel_type仅支持event_bus/stdout/webhook"}), 400
+    if channel_type == "webhook" and not endpoint:
+        return jsonify({"error": "webhook通道必须提供endpoint"}), 400
+    if min_severity not in {"info", "warning", "critical"}:
+        return jsonify({"error": "min_severity必须是info/warning/critical"}), 400
+
+    channel_id = CONFIG_STORE.upsert_alert_channel(
+        channel_id=channel_id,
+        name=name or channel_id or f"{channel_type}-channel",
+        channel_type=channel_type,
+        endpoint=endpoint,
+        min_severity=min_severity,
+        enabled=enabled,
+        config=config,
+    )
+    item = CONFIG_STORE.get_alert_channel(channel_id)
+    _audit(
+        event_type="alert_channel",
+        action="upsert",
+        actor=actor,
+        target_type="alert_channel",
+        target_id=channel_id,
+        details={
+            "channel_type": channel_type,
+            "enabled": enabled,
+            "min_severity": min_severity,
+        },
+    )
+    return jsonify({"status": "ok", "channel": item})
+
+
+@app.post("/alerts/channels/<channel_id>/toggle")
+def toggle_alert_channel(channel_id: str):
+    """启用/禁用告警通道。"""
+    data = request.json or {}
+    actor = (data.get("actor") or "operator").strip()
+    enabled = _as_bool(data.get("enabled"), True)
+    item = CONFIG_STORE.set_alert_channel_enabled(channel_id, enabled)
+    if not item:
+        return jsonify({"error": "channel not found"}), 404
+
+    _audit(
+        event_type="alert_channel",
+        action="toggle",
+        actor=actor,
+        target_type="alert_channel",
+        target_id=channel_id,
+        details={"enabled": enabled},
+    )
+    return jsonify({"status": "ok", "channel": item})
+
+
+@app.get("/alerts/incidents")
+def list_alert_incidents():
+    """查看告警事件。"""
+    limit = request.args.get("limit", 100, type=int)
+    status = (request.args.get("status") or "").strip()
+    severity = (request.args.get("severity") or "").strip()
+    incidents = CONFIG_STORE.list_alert_incidents(limit=limit, status=status, severity=severity)
+    return jsonify({"incidents": incidents})
+
+
+@app.post("/alerts/incidents/<incident_id>/ack")
+def acknowledge_alert_incident(incident_id: str):
+    """确认告警事件。"""
+    data = request.json or {}
+    actor = (data.get("actor") or "operator").strip()
+    note = (data.get("note") or "").strip()
+    status = (data.get("status") or "acknowledged").strip()
+    item = CONFIG_STORE.acknowledge_alert_incident(
+        incident_id=incident_id,
+        actor=actor,
+        note=note,
+        status=status,
+    )
+    if not item:
+        return jsonify({"error": "incident not found"}), 404
+
+    _audit(
+        event_type="alert_incident",
+        action=f"ack:{status}",
+        actor=actor,
+        target_type="alert_incident",
+        target_id=incident_id,
+        details={"note": note},
+    )
+    return jsonify({"status": "ok", "incident": item})
+
+
+@app.get("/alerts/deliveries")
+def list_alert_deliveries():
+    """查看告警投递记录。"""
+    limit = request.args.get("limit", 200, type=int)
+    status = (request.args.get("status") or "").strip()
+    severity = (request.args.get("severity") or "").strip()
+    channel_id = (request.args.get("channel_id") or "").strip()
+    alert_type = (request.args.get("alert_type") or "").strip()
+    items = CONFIG_STORE.list_alert_deliveries(
+        limit=limit,
+        status=status,
+        severity=severity,
+        channel_id=channel_id,
+        alert_type=alert_type,
+    )
+    return jsonify({"deliveries": items})
+
+
+@app.get("/audit/logs")
+def list_audit_logs():
+    """查询审计日志。"""
+    limit = request.args.get("limit", 100, type=int)
+    event_type = (request.args.get("event_type") or "").strip()
+    actor = (request.args.get("actor") or "").strip()
+    target_type = (request.args.get("target_type") or "").strip()
+    target_id = (request.args.get("target_id") or "").strip()
+    severity = (request.args.get("severity") or "").strip()
+    logs = CONFIG_STORE.list_audit_logs(
+        limit=limit,
+        event_type=event_type,
+        actor=actor,
+        target_type=target_type,
+        target_id=target_id,
+        severity=severity,
+    )
+    return jsonify({"logs": logs})
 
 
 # 兼容旧API（保持页面功能正常）
@@ -485,6 +1600,7 @@ def start_test_workflow():
 def run_baseline_test():
     """运行批量对抗测试 - 全部26个反贼Agent"""
     data = request.json or {}
+    personas = get_all_personas()
     
     # 检查是否有规则
     if not SYSTEM_STATE["rules"]:
@@ -507,13 +1623,13 @@ def run_baseline_test():
     posts_generated = []
     
     # 测试所有26个反贼Agent
-    for i, persona in enumerate(USER_PERSONAS):
+    for i, persona in enumerate(personas):
         # 发送"Agent思考"事件
         EVENT_BUS.emit("agent_thinking", {
             "agent": persona["name"],
             "category": persona.get("category", ""),
             "action": "正在构思帖子...",
-            "progress": f"{i+1}/{len(USER_PERSONAS)}"
+            "progress": f"{i+1}/{len(personas)}"
         })
         
         result = run_adversarial_battle(persona["id"])
@@ -581,6 +1697,7 @@ def get_workflow_status():
 def run_adversarial_test():
     """运行演化后的对抗测试 - 反贼学习后再测试一次"""
     data = request.json or {}
+    personas = get_all_personas()
     
     # 检查是否有规则
     if not SYSTEM_STATE["rules"]:
@@ -621,7 +1738,7 @@ def run_adversarial_test():
     # 2. 成功的Agent与其他Agent进行一对一讨论
     discussion_pairs = []
     successful_agents = list(set(st["agent_id"] for st in successful_techniques if st["agent_id"]))
-    failed_agents = [p["id"] for p in USER_PERSONAS if p["id"] not in successful_agents]
+    failed_agents = [p["id"] for p in personas if p["id"] not in successful_agents]
     
     # 随机配对进行讨论
     for success_id in successful_agents[:3]:  # 最多3个成功者分享
@@ -636,8 +1753,7 @@ def run_adversarial_test():
                 
                 # 进行讨论
                 learner_agent = AttackAgent(learner_persona)
-                agent_state = SYSTEM_STATE["peripheral_agents"].get(learner_id, {})
-                learner_agent.learned_techniques = agent_state.get("learned_techniques", [])
+                load_agent_runtime(learner_agent)
                 
                 discussion = learner_agent.discuss_with_peer(
                     success_persona["name"], 
@@ -665,10 +1781,9 @@ def run_adversarial_test():
     
     learning_connections = []  # 记录学习关系，用于前端绘制
     
-    for persona in USER_PERSONAS:
+    for persona in personas:
         agent = AttackAgent(persona)
-        agent_state = SYSTEM_STATE["peripheral_agents"].get(persona["id"], {})
-        agent.learned_techniques = agent_state.get("learned_techniques", [])
+        load_agent_runtime(agent)
         
         # 尝试从成功的技巧中学习（只学习与自己人设相关的）
         learned_new = []
@@ -703,11 +1818,11 @@ def run_adversarial_test():
         "iteration": 1
     })
     
-    for i, persona in enumerate(USER_PERSONAS):
+    for i, persona in enumerate(personas):
         EVENT_BUS.emit("agent_thinking", {
             "agent": persona["name"],
             "action": "运用学到的新技巧构思帖子...",
-            "progress": f"{i+1}/{len(USER_PERSONAS)}"
+            "progress": f"{i+1}/{len(personas)}"
         })
         
         result = run_adversarial_battle(persona["id"], None, 1)  # iteration=1表示第二轮
@@ -947,4 +2062,4 @@ def reset_test_workflow():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)
