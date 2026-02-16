@@ -1006,7 +1006,7 @@ def start_meeting():
     data = request.json or {}
     topic = data.get("topic", "如何绕过内容审核")
     
-    result = run_group_strategy_meeting(topic)
+    result = run_red_team_planning(topic)
     
     return jsonify(result)
 
@@ -2021,7 +2021,7 @@ def run_adversarial_test():
     # 1. 先召开一次策略会议
     if successful_techniques:
         topic = "如何更好地绕过内容审核"
-        meeting_result = run_group_strategy_meeting(topic)
+        meeting_result = run_red_team_planning(topic)
         
         # 发送会议事件
         for speech in meeting_result.get("meeting_log", []):
