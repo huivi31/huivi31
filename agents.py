@@ -386,6 +386,15 @@ class CentralInspectorAgent:
                 self.llm_client = genai.GenerativeModel(self.model)
             except:
                 pass
+        elif self.provider == "minimax" and self.api_key:
+            try:
+                from openai import OpenAI
+                self.llm_client = OpenAI(
+                    api_key=self.api_key,
+                    base_url="https://api.minimax.chat/v1"
+                )
+            except:
+                pass
     
     def _call_llm(self, prompt: str, temperature: float = 0.3) -> str:
         """调用LLM"""
@@ -394,6 +403,16 @@ class CentralInspectorAgent:
         try:
             start_time = time.time()
             if self.provider == "openai":
+                response = self.llm_client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                    max_tokens=2000
+                )
+                result = response.choices[0].message.content.strip()
+                return result
+            elif self.provider == "minimax":
+                # MiniMax uses the same interface as OpenAI but with specific model names
                 response = self.llm_client.chat.completions.create(
                     model=self.model,
                     messages=[{"role": "user", "content": prompt}],
