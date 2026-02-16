@@ -1439,6 +1439,38 @@
       </div>
     </div>
 
+    <!-- OpenClaw Board Section -->
+    <div class="panel-section" style="background: linear-gradient(135deg, rgba(40,0,60,0.95), rgba(20,0,40,0.95)); border: 1px solid rgba(255,0,255,0.4);">
+      <div class="section-title" style="color:#ff66ff;">🕵️ OpenClaw 情报局</div>
+      
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <div class="stat-box" style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
+          <div style="font-size:18px; color:#ff66ff;" id="boardIntelCount">0</div>
+          <div style="font-size:9px; color:#aa66aa;">情报条目</div>
+        </div>
+        <div class="stat-box" style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
+           <div style="font-size:18px; color:#ff66ff;" id="boardPlanCount">0</div>
+           <div style="font-size:9px; color:#aa66aa;">活跃计划</div>
+        </div>
+      </div>
+
+      <div class="btn-group" style="margin-bottom:12px;">
+        <button class="btn btn-primary" id="runPlanningBtn" 
+          style="padding:8px 12px; font-size:11px; background:linear-gradient(135deg, #cc00cc, #ff00ff); border-color:#ff66ff;">
+          🧠 召开红队策划会
+        </button>
+      </div>
+
+      <div style="font-size:10px; color:#ff66ff; margin-bottom:6px;">最新情报 (Intel Feed)</div>
+      <div id="boardIntelFeed" style="max-height:120px; overflow-y:auto; background:rgba(20,0,30,0.8); border:1px solid rgba(255,0,255,0.2); border-radius:6px; padding:8px; font-size:10px; font-family:monospace;">
+        <div style="color:#664466; text-align:center;">暂无情报...</div>
+      </div>
+      
+      <button class="btn btn-secondary" style="width:100%; margin-top:8px; font-size:10px; color:#ff66ff; border-color:rgba(255,0,255,0.3);" onclick="refreshBoardData()">
+        ↻ 刷新情报板
+      </button>
+    </div>
+
     <!-- 新的测试流程面板 -->
     <div class="panel-section"
       style="background: linear-gradient(135deg, rgba(0,40,60,0.95), rgba(0,20,40,0.95)); border: 1px solid rgba(0,200,255,0.4);">
@@ -1730,6 +1762,81 @@
     let simulationTimer = null;
     let simulationRunning = false;
     let currentFilter = 'all';
+    
+    // OpenClaw Board Data
+    let boardData = { intel_feed: [], active_plans: {}, stats: {} };
+
+    async function refreshBoardData() {
+      try {
+        const res = await fetch('/board/data');
+        const data = await res.json();
+        boardData = data;
+        renderBoardPanel();
+      } catch (e) {
+        console.error("Failed to fetch board data", e);
+      }
+    }
+
+    function renderBoardPanel() {
+      document.getElementById('boardIntelCount').innerText = boardData.stats.intel_count || 0;
+      document.getElementById('boardPlanCount').innerText = boardData.stats.plans_count || 0;
+      
+      const feedContainer = document.getElementById('boardIntelFeed');
+      if (boardData.intel_feed && boardData.intel_feed.length > 0) {
+        feedContainer.innerHTML = boardData.intel_feed.map(item => {
+            const time = new Date(item.timestamp * 1000).toLocaleTimeString();
+            return `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,0,255,0.15); padding-bottom:4px;">
+              <span style="color:#aa66aa;">[${time}]</span> 
+              <span style="color:#ff66ff; font-weight:bold;">${item.agent_id}:</span> 
+              <span style="color:#e0d0e0;">${item.content?.substring(0, 50)}...</span>
+            </div>`;
+        }).reverse().join('');
+      } else {
+        feedContainer.innerHTML = '<div style="color:#664466; text-align:center;">暂无情报...</div>';
+      }
+    }
+
+    async function runPlanningMeeting() {
+      const btn = document.getElementById('runPlanningBtn');
+      const originalText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = "🛑 策划中...";
+      
+      const topic = document.getElementById('testTopic').value || "通用敏感话题";
+      addLog(`开始红队策划会议: ${topic}`, 'info');
+
+      try {
+        const res = await fetch('/battle/planning', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: topic })
+        });
+        const result = await res.json();
+        
+        addLog(`策划完成! 产生 ${result.proposals_count} 个提案`, 'success');
+        if (result.winner) {
+            addLog(`🏆 最佳策略: ${result.winner.strategy_name} (票数: ${result.winner.votes})`, 'success');
+            // Show modal with details
+            showReportModal("红队策划会议结果", `
+              <h3>🏆 获胜策略: ${result.winner.strategy_name}</h3>
+              <p><strong>提出者:</strong> ${result.winner.agent_id}</p>
+              <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:6px; margin:10px 0;">
+                ${result.winner.content.replace(/\n/g, '<br>')}
+              </div>
+              <h4>🗳️ 投票详情</h4>
+              <ul>
+                ${result.winner.voters.map(v => `<li>${v}</li>`).join('')}
+              </ul>
+            `);
+        }
+        refreshBoardData();
+      } catch (e) {
+        addLog(`策划会议失败: ${e}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+      }
+    }
 
     function buildPerfProfile() {
       const isMobile = window.matchMedia('(max-width: 860px)').matches;
@@ -2336,6 +2443,13 @@
       });
 
       renderer.domElement.addEventListener('click', handleClick);
+
+      // Bind Planning Button
+      const planBtn = document.getElementById('runPlanningBtn');
+      if(planBtn) planBtn.addEventListener('click', runPlanningMeeting);
+      
+      // Initial Board Load
+      setTimeout(refreshBoardData, 1000);
 
       // ===== 触控支持 =====
       let touchStartDistance = 0;

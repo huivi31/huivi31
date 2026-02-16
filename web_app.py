@@ -41,7 +41,10 @@ from agents import (
 from battle import (
     run_agent_discussion, run_group_strategy_meeting,
     run_adversarial_battle, run_iterative_optimization,
-    run_collaborative_attack
+    run_agent_discussion, run_group_strategy_meeting,
+    run_adversarial_battle, run_iterative_optimization,
+    run_collaborative_attack, run_red_team_planning,
+    OPENCLAW_BOARD
 )
 from orchestrator import CAMPAIGN_ORCHESTRATOR
 from alerting import dispatch_regression_alerts
@@ -776,6 +779,30 @@ def get_battle_history():
         "history": history,
         "total_count": len(SYSTEM_STATE["battle_history"]),
     })
+
+
+@app.get("/board/data")
+def get_board_data():
+    """获取OpenClaw Board数据"""
+    return jsonify({
+        "intel_feed": OPENCLAW_BOARD.intel_feed[-50:],  # Return last 50 items
+        "active_plans": OPENCLAW_BOARD.active_plans,
+        "rule_profile": OPENCLAW_BOARD.rule_profile,
+        "stats": {
+            "intel_count": len(OPENCLAW_BOARD.intel_feed),
+            "plans_count": sum(len(p) for p in OPENCLAW_BOARD.active_plans.values())
+        }
+    })
+
+
+@app.post("/battle/planning")
+def run_planning():
+    """运行红队策划会议"""
+    data = request.json or {}
+    topic = data.get("topic", "通用话题")
+    
+    result = run_red_team_planning(topic)
+    return jsonify(result)
 
 
 @app.get("/inspector/stats")
