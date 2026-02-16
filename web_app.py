@@ -39,9 +39,7 @@ from agents import (
     export_peripheral_agents_state, restore_peripheral_agents_state,
 )
 from battle import (
-    run_agent_discussion, run_group_strategy_meeting,
-    run_adversarial_battle, run_iterative_optimization,
-    run_agent_discussion, run_group_strategy_meeting,
+    run_agent_discussion,
     run_adversarial_battle, run_iterative_optimization,
     run_collaborative_attack, run_red_team_planning,
     OPENCLAW_BOARD
