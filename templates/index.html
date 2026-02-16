@@ -1578,6 +1578,62 @@
     </div>
 
     <div class="panel-section">
+      <div class="section-title">🏢 企业级总控台</div>
+      <div style="font-size:10px;color:#5a8aaa;line-height:1.6;margin-bottom:10px;">
+        该面板覆盖后端全部能力：规则治理、战役编排、回归矩阵、告警与审计、知识库、社区与测试流程。
+      </div>
+
+      <div class="form-group">
+        <label>接口模板（全量）</label>
+        <select id="enterprisePreset"></select>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Path 参数(JSON)</label>
+          <textarea id="enterprisePathParams" rows="3"
+            placeholder='{"campaign_id":"cmp_xxx","report_id":"rep_xxx","persona_id":"mixed_writer"}'></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Query 参数(JSON)</label>
+          <textarea id="enterpriseQueryParams" rows="3"
+            placeholder='{"limit":20,"status":"pending","include_items":1}'></textarea>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Body 参数(JSON)</label>
+        <textarea id="enterpriseBody" rows="6"
+          placeholder='{"actor":"ui","scenario":"enterprise-run","snapshot_ids":["rs_xxx","rs_yyy"]}'></textarea>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="enterpriseRunBtn"
+          style="padding:8px 12px;font-size:11px;background:linear-gradient(135deg,#005f9f,#00a9ff);">
+          ▶ 调用接口
+        </button>
+        <button class="btn btn-secondary" id="enterpriseCopyCurlBtn" style="padding:8px 12px;font-size:11px;">
+          复制 cURL
+        </button>
+      </div>
+      <div class="btn-group" style="margin-top:6px;">
+        <button class="btn btn-secondary" id="enterpriseRefreshBtn" style="padding:6px 12px;font-size:10px;">
+          🔄 刷新关键看板
+        </button>
+        <button class="btn btn-secondary" id="enterpriseClearBtn" style="padding:6px 12px;font-size:10px;">
+          清空结果
+        </button>
+      </div>
+
+      <div id="enterpriseStatus" style="font-size:10px;color:#5a8aaa;margin-top:8px;">
+        选择接口模板后可直接运行，结果会显示在下方。
+      </div>
+      <div class="result-area show" id="enterpriseResultArea" style="display:block;max-height:260px;margin-top:8px;">
+        <pre id="enterpriseResultContent">等待调用...</pre>
+      </div>
+    </div>
+
+    <div class="panel-section">
       <div class="section-title">📊 测试结果</div>
       <div class="result-area" id="resultArea">
         <div class="result-header">
@@ -2429,6 +2485,7 @@
       initCommunityControls();
       refreshRules();
       initWorkflowControls();
+      initEnterpriseApiConsole();
       initAgentEditor();
       renderer.domElement.style.cursor = 'grab';
     }
@@ -3221,13 +3278,14 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
     async function runWorkflowPhase(phase, params = {}) {
       try {
-        // 特殊处理演化阶段 - 需要轮询进度
+        const phaseAlias = { evolve: 'adversarial' };
+        const apiPhase = phaseAlias[phase] || phase;
         if (phase === 'evolve') {
-          return await runEvolutionWithProgress(params);
+          addLog('ℹ️ evolve阶段已合并到adversarial接口执行', 'info');
         }
 
         const options = getWorkflowOptions();
-        const response = await fetch(`/test-workflow/${phase}`, {
+        const response = await fetch(`/test-workflow/${apiPhase}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...options, ...params })
@@ -3242,7 +3300,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
         // 显示阶段结果摘要
         if (data.summary) {
-          displayPhaseSummary(phase, data.summary);
+          displayPhaseSummary(apiPhase, data.summary);
         }
 
         // 更新状态显示
@@ -3258,110 +3316,8 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     }
 
     async function runEvolutionWithProgress(params) {
-      // 启动演化
-      const options = getWorkflowOptions();
-      const startResponse = await fetch('/test-workflow/evolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...options, ...params })
-      });
-
-      const startData = await startResponse.json();
-
-      if (!startResponse.ok) {
-        addLog(`❌ 演化启动失败: ${startData.error}`, 'error');
-        return null;
-      }
-
-      if (startData.status === 'running') {
-        addLog('⏳ 演化已在运行中，继续等待...', 'info');
-      } else {
-        addLog(`🌱 社区演化已启动，预计运行${startData.config.estimated_duration_minutes}分钟`, 'info');
-        addLog(`   共${startData.config.total_steps}步，每步约${startData.config.step_interval_seconds}秒`, 'info');
-      }
-
-      // 轮询进度
-      const statusDiv = document.getElementById('workflowStatus');
-      statusDiv.style.display = 'block';
-
-      while (true) {
-        await sleep(3000); // 每3秒查询一次
-
-        // 同时查询状态和最新关系
-        const [statusResponse, relationsResponse] = await Promise.all([
-          fetch('/test-workflow/evolve/status'),
-          fetch('/community/relations')
-        ]);
-
-        const statusData = await statusResponse.json();
-
-        // 更新关系线
-        if (relationsResponse.ok) {
-          const relationsData = await relationsResponse.json();
-          if (relationsData.relations) {
-            applyRelations(relationsData.relations);
-          }
-        }
-
-        if (statusData.status === 'running') {
-          const p = statusData.progress;
-          const remainingMin = Math.ceil(p.estimated_remaining_seconds / 60);
-          statusDiv.textContent = `🌱 演化中: ${p.current_step}/${p.total_steps} (${p.percent}%) | 约${remainingMin}分钟剩余`;
-
-          // 显示最新事件并触发闪光效果
-          if (statusData.latest_events && statusData.latest_events.length > 0) {
-            statusData.latest_events.forEach(event => {
-              // 触发闪光效果 - 神经传导
-              flashEventRelation(event);
-
-              // 显示日志
-              let logMsg = '';
-              let logType = 'info';
-              if (event.type === 'technique_outbreak') {
-                logMsg = `⚡ 临界点爆发！${event.technique}传播率${event.adoption_rate}%`;
-                logType = 'warning';
-              } else if (event.type === 'network_evolution') {
-                logMsg = `📊 检测到${event.factions_detected}个子网络形成`;
-                logType = 'info';
-              } else if (event.type === 'group_share') {
-                logMsg = `【分享】${event.host} 传授技巧给${event.count - 1}人`;
-                logType = 'success';
-              } else if (event.type === 'group_test') {
-                logMsg = `【测试】${event.actor} 测试边界`;
-                logType = 'warning';
-              } else if (event.type === 'follow') {
-                logMsg = `【关注】${event.actor} 关注了 ${event.target}`;
-                logType = 'info';
-              } else if (event.type === 'share') {
-                logMsg = `【分享】${event.actor} 向 ${event.target} 分享经验`;
-                logType = 'success';
-              } else if (event.type === 'learn') {
-                logMsg = `【学习】${event.actor} 向 ${event.target} 学习策略`;
-                logType = 'info';
-              } else if (event.type === 'test') {
-                logMsg = `【测试】${event.actor} 测试边界${event.discovered ? '（被发现）' : '（隐蔽）'}`;
-                logType = event.discovered ? 'error' : 'warning';
-              } else if (event.type === 'report') {
-                logMsg = `【举报】${event.actor} 举报了 ${event.target}`;
-                logType = 'error';
-              } else if (event.type === 'block') {
-                logMsg = `【屏蔽】${event.actor} 屏蔽了 ${event.target}`;
-                logType = 'error';
-              }
-
-              if (logMsg) {
-                addLog(logMsg, logType);
-              }
-            });
-          }
-        } else if (statusData.status === 'completed') {
-          statusDiv.textContent = `✓ 演化完成: ${statusData.result.total_steps}步, ${statusData.result.total_events}个事件`;
-          addLog(`✅ 社区演化完成！耗时${Math.round(statusData.result.elapsed_seconds / 60)}分钟`, 'success');
-          return statusData;
-        } else {
-          break;
-        }
-      }
+      addLog('ℹ️ 演化阶段已合并到adversarial接口，自动执行对抗阶段', 'info');
+      return runWorkflowPhase('adversarial', params);
     }
 
     function displayPhaseSummary(phase, summary) {
@@ -4787,6 +4743,324 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
     function getRiskTypeName(type) {
       return { political: '政治敏感', violence: '暴力内容', illegal: '违法犯罪', jailbreak: '越狱攻击', prompt_injection: '提示词注入', misinformation: '虚假信息', privacy: '隐私泄露' }[type] || type;
+    }
+
+    // ========== 企业级API总控台 ==========
+    const ENTERPRISE_API_PRESETS = [
+      { label: '首页模板', method: 'GET', path: '/' },
+      { label: '健康检查', method: 'GET', path: '/health' },
+      { label: '规则-查询', method: 'GET', path: '/rules' },
+      { label: '规则-设置', method: 'POST', path: '/rules', body: { rules_text: '禁止讨论政治敏感话题\\n禁止传播违法犯罪内容', actor: 'ui' } },
+      { label: '规则快照-创建', method: 'POST', path: '/rules/snapshots', body: { name: 'snapshot-from-ui', actor: 'ui' } },
+      { label: '规则快照-列表', method: 'GET', path: '/rules/snapshots', query: { limit: 20 } },
+      { label: '规则快照-应用', method: 'POST', path: '/rules/snapshots/<snapshot_id>/apply', pathParams: { snapshot_id: 'rs_xxx' }, body: { actor: 'ui' } },
+      { label: '规则变更-创建申请', method: 'POST', path: '/rules/change-requests', body: { title: 'UI规则变更', proposer: 'ui', rules_text: '禁止讨论敏感事件', risk_level: 'medium' } },
+      { label: '规则变更-申请列表', method: 'GET', path: '/rules/change-requests', query: { status: '', limit: 20 } },
+      { label: '规则变更-查看详情', method: 'GET', path: '/rules/change-requests/<request_id>', pathParams: { request_id: 'rcr_xxx' } },
+      { label: '规则变更-审批', method: 'POST', path: '/rules/change-requests/<request_id>/review', pathParams: { request_id: 'rcr_xxx' }, body: { decision: 'approved', reviewer: 'ui', comment: '通过' } },
+      { label: '规则变更-应用', method: 'POST', path: '/rules/change-requests/<request_id>/apply', pathParams: { request_id: 'rcr_xxx' }, body: { actor: 'ui' } },
+      { label: '技法库-列表', method: 'GET', path: '/techniques' },
+      { label: '技法库-新增/更新', method: 'POST', path: '/techniques', body: { category: '语义伪装', name: '隐喻替换', desc: '示例技法', difficulty: 3 } },
+      { label: '对抗-单次', method: 'POST', path: '/battle/run', body: { persona_id: 'mixed_writer', target_keyword: '测试主题', iteration: 0 } },
+      { label: '对抗-迭代', method: 'POST', path: '/battle/iterate', body: { persona_id: 'mixed_writer', target_keyword: '测试主题', max_iterations: 3 } },
+      { label: '对抗-协作', method: 'POST', path: '/battle/collaborate', body: { agent_ids: ['mixed_writer', 'metaphor_master'], target_keyword: '测试主题' } },
+      { label: '对抗-历史', method: 'GET', path: '/battle/history', query: { limit: 20 } },
+      { label: '中心质检-统计', method: 'GET', path: '/inspector/stats' },
+      { label: 'Agent-状态', method: 'GET', path: '/agent/<persona_id>/state', pathParams: { persona_id: 'mixed_writer' } },
+      { label: 'Agent-解锁技法', method: 'GET', path: '/agent/<persona_id>/techniques/unlocked', pathParams: { persona_id: 'mixed_writer' } },
+      { label: 'Agent-配置更新', method: 'POST', path: '/agent/<persona_id>/config', pathParams: { persona_id: 'mixed_writer' }, body: { description: '由企业总控台更新' } },
+      { label: 'Agent群体-进化看板', method: 'GET', path: '/agents/progression' },
+      { label: 'Agent群体-状态快照', method: 'GET', path: '/agents/states' },
+      { label: '实时事件流', method: 'GET', path: '/events', query: { count: 20 } },
+      { label: '启动讨论', method: 'POST', path: '/discussion/start', body: { topic: '如何绕过审核' } },
+      { label: '启动会议', method: 'POST', path: '/meeting/start', body: { topic: '如何绕过内容审核' } },
+      { label: '系统重置', method: 'POST', path: '/system/reset', body: {} },
+      { label: '知识投喂-文本', method: 'POST', path: '/knowledge/feed', body: { type: 'materials', content: '这是一条可学习的样本语料', source: 'ui' } },
+      { label: '知识投喂-文档上传(请用左侧文档窗)', method: 'POST', path: '/knowledge/feed/document', bodyType: 'multipart' },
+      { label: '知识库-查询', method: 'GET', path: '/knowledge/list', query: { limit: 50, include_items: 1 } },
+      { label: '知识库-清空', method: 'POST', path: '/knowledge/clear', body: {} },
+      { label: '规则引擎统计', method: 'GET', path: '/rule-engine/stats' },
+      { label: '战役-运行', method: 'POST', path: '/campaigns/run', body: { name: 'campaign-ui', scenario: 'enterprise-ui', baseline_rounds: 1, adversarial_rounds: 1, enable_peer_learning: true } },
+      { label: '战役-列表', method: 'GET', path: '/campaigns', query: { limit: 20 } },
+      { label: '战役-详情', method: 'GET', path: '/campaigns/<campaign_id>', pathParams: { campaign_id: 'cmp_xxx' } },
+      { label: '战役-回放', method: 'GET', path: '/campaigns/<campaign_id>/replay', pathParams: { campaign_id: 'cmp_xxx' }, query: { phase: '', limit: 200 } },
+      { label: '战役-对比', method: 'POST', path: '/campaigns/compare', body: { campaign_ids: ['cmp_a', 'cmp_b'] } },
+      { label: '战役-A/B回归', method: 'POST', path: '/campaigns/ab-run', body: { snapshot_a_id: 'rs_a', snapshot_b_id: 'rs_b', scenario: 'ab-ui' } },
+      { label: '回归矩阵-运行', method: 'POST', path: '/regressions/run', body: { snapshot_ids: ['rs_a', 'rs_b'], scenario: 'matrix-ui', dispatch_alerts: true } },
+      { label: '回归报告-列表', method: 'GET', path: '/regressions/reports', query: { limit: 20 } },
+      { label: '回归报告-详情', method: 'GET', path: '/regressions/reports/<report_id>', pathParams: { report_id: 'rep_xxx' } },
+      { label: '回归报告-Markdown', method: 'GET', path: '/regressions/reports/<report_id>/markdown', pathParams: { report_id: 'rep_xxx' } },
+      { label: '回归报告-重发告警', method: 'POST', path: '/regressions/reports/<report_id>/dispatch-alerts', pathParams: { report_id: 'rep_xxx' }, body: { actor: 'ui', alert_channel_ids: [] } },
+      { label: '告警通道-列表', method: 'GET', path: '/alerts/channels', query: { include_disabled: 1 } },
+      { label: '告警通道-新增/更新', method: 'POST', path: '/alerts/channels', body: { actor: 'ui', name: 'default_event_bus', channel_type: 'event_bus', min_severity: 'warning', enabled: true } },
+      { label: '告警通道-启停', method: 'POST', path: '/alerts/channels/<channel_id>/toggle', pathParams: { channel_id: 'default_event_bus' }, body: { actor: 'ui', enabled: true } },
+      { label: '告警事件-列表', method: 'GET', path: '/alerts/incidents', query: { limit: 20 } },
+      { label: '告警事件-确认', method: 'POST', path: '/alerts/incidents/<incident_id>/ack', pathParams: { incident_id: 'inc_xxx' }, body: { actor: 'ui', status: 'acknowledged', note: '已处理' } },
+      { label: '告警投递-列表', method: 'GET', path: '/alerts/deliveries', query: { limit: 20 } },
+      { label: '审计日志-列表', method: 'GET', path: '/audit/logs', query: { limit: 20 } },
+      { label: '兼容接口-社区模拟', method: 'POST', path: '/simulate', body: {} },
+      { label: '兼容接口-单角色运行', method: 'POST', path: '/run', body: { persona_id: 'mixed_writer' } },
+      { label: '社区记忆-查询', method: 'GET', path: '/community/memory/<persona_id>', pathParams: { persona_id: 'mixed_writer' } },
+      { label: '社区声誉-查询', method: 'GET', path: '/community/reputation/<persona_id>', pathParams: { persona_id: 'mixed_writer' } },
+      { label: '社区关系-查询', method: 'GET', path: '/community/relations' },
+      { label: '社区Agent配置(兼容)', method: 'POST', path: '/community/agent/<persona_id>/config', pathParams: { persona_id: 'mixed_writer' }, body: { description: 'legacy update from ui' } },
+      { label: '社区重置(兼容)', method: 'POST', path: '/community/reset', body: {} },
+      { label: '工作流-启动', method: 'POST', path: '/test-workflow/start', body: {} },
+      { label: '工作流-基线', method: 'POST', path: '/test-workflow/baseline', body: {} },
+      { label: '工作流-状态', method: 'GET', path: '/test-workflow/status' },
+      { label: '工作流-对抗', method: 'POST', path: '/test-workflow/adversarial', body: {} },
+      { label: '工作流-分析', method: 'POST', path: '/test-workflow/analyze', body: {} },
+      { label: '工作流-报告', method: 'GET', path: '/test-workflow/report' },
+      { label: '工作流-重置', method: 'POST', path: '/test-workflow/reset', body: {} }
+    ];
+    let enterprisePresetIndex = 0;
+
+    function toPrettyJSON(value) {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value;
+      try { return JSON.stringify(value, null, 2); } catch (_e) { return String(value); }
+    }
+
+    function parseJSONInput(id, fallback = {}) {
+      const el = document.getElementById(id);
+      if (!el) return fallback;
+      const raw = (el.value || '').trim();
+      if (!raw) return fallback;
+      return JSON.parse(raw);
+    }
+
+    function buildPathFromTemplate(pathTemplate, pathParams) {
+      return pathTemplate.replace(/<([^>]+)>/g, (_m, key) => {
+        const val = pathParams && Object.prototype.hasOwnProperty.call(pathParams, key) ? pathParams[key] : undefined;
+        if (val === undefined || val === null || String(val).trim() === '') {
+          throw new Error(`缺少Path参数: ${key}`);
+        }
+        return encodeURIComponent(String(val));
+      });
+    }
+
+    function applyQueryParams(path, queryObj) {
+      if (!queryObj || typeof queryObj !== 'object' || Array.isArray(queryObj)) return path;
+      const params = new URLSearchParams();
+      Object.entries(queryObj).forEach(([key, val]) => {
+        if (val === undefined || val === null || val === '') return;
+        if (Array.isArray(val)) {
+          val.forEach(item => params.append(key, String(item)));
+          return;
+        }
+        if (typeof val === 'object') {
+          params.append(key, JSON.stringify(val));
+          return;
+        }
+        params.append(key, String(val));
+      });
+      const qs = params.toString();
+      if (!qs) return path;
+      return `${path}?${qs}`;
+    }
+
+    function setEnterpriseStatus(text, color = '#5a8aaa') {
+      const el = document.getElementById('enterpriseStatus');
+      if (!el) return;
+      el.textContent = text;
+      el.style.color = color;
+    }
+
+    function setEnterpriseResult(value) {
+      const el = document.getElementById('enterpriseResultContent');
+      if (!el) return;
+      el.textContent = toPrettyJSON(value);
+    }
+
+    function getCurrentEnterprisePreset() {
+      return ENTERPRISE_API_PRESETS[enterprisePresetIndex] || null;
+    }
+
+    function onEnterprisePresetChange() {
+      const select = document.getElementById('enterprisePreset');
+      if (!select) return;
+      enterprisePresetIndex = parseInt(select.value, 10) || 0;
+      const preset = getCurrentEnterprisePreset();
+      if (!preset) return;
+
+      const pathParamsEl = document.getElementById('enterprisePathParams');
+      const queryEl = document.getElementById('enterpriseQueryParams');
+      const bodyEl = document.getElementById('enterpriseBody');
+
+      if (pathParamsEl) pathParamsEl.value = toPrettyJSON(preset.pathParams || {});
+      if (queryEl) queryEl.value = toPrettyJSON(preset.query || {});
+      if (bodyEl) bodyEl.value = toPrettyJSON(preset.body || {});
+
+      const note = preset.bodyType === 'multipart'
+        ? '该接口为文件上传，请用左侧Document Feed窗口执行。'
+        : `当前模板: [${preset.method}] ${preset.path} · ${preset.label}`;
+      setEnterpriseStatus(note, preset.bodyType === 'multipart' ? '#ffaa00' : '#5a8aaa');
+    }
+
+    function buildEnterpriseRequestFromUI() {
+      const preset = getCurrentEnterprisePreset();
+      if (!preset) throw new Error('未找到接口模板');
+      const pathParams = parseJSONInput('enterprisePathParams', preset.pathParams || {});
+      const queryObj = parseJSONInput('enterpriseQueryParams', preset.query || {});
+      const bodyObj = parseJSONInput('enterpriseBody', preset.body || {});
+      const path = buildPathFromTemplate(preset.path, pathParams);
+      const pathWithQuery = applyQueryParams(path, queryObj);
+      return { preset, path, pathWithQuery, queryObj, bodyObj };
+    }
+
+    async function runEnterpriseApiRequest() {
+      const runBtn = document.getElementById('enterpriseRunBtn');
+      if (!runBtn) return;
+      runBtn.disabled = true;
+
+      try {
+        const { preset, pathWithQuery, bodyObj } = buildEnterpriseRequestFromUI();
+        if (preset.bodyType === 'multipart') {
+          setEnterpriseStatus('该模板是文件上传接口，请使用左侧Document Feed执行。', '#ffaa00');
+          setEnterpriseResult({ hint: '请在左侧选择文件并上传。' });
+          return;
+        }
+
+        const req = { method: preset.method, headers: {} };
+        if (!['GET', 'HEAD'].includes(preset.method)) {
+          req.headers['Content-Type'] = 'application/json';
+          req.body = JSON.stringify(bodyObj || {});
+        }
+
+        const started = performance.now();
+        const response = await fetch(pathWithQuery, req);
+        const elapsed = Math.max(1, Math.round(performance.now() - started));
+        const text = await response.text();
+
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch (_e) {
+          parsed = text;
+        }
+
+        setEnterpriseResult({
+          request: { method: preset.method, path: pathWithQuery },
+          response: { status: response.status, ok: response.ok, elapsed_ms: elapsed },
+          data: parsed
+        });
+        setEnterpriseStatus(
+          `[${response.status}] ${preset.method} ${pathWithQuery} · ${elapsed}ms`,
+          response.ok ? '#00ff88' : '#ff6b6b'
+        );
+        addLog(`🏢 API: ${preset.method} ${pathWithQuery} -> ${response.status}`, response.ok ? 'success' : 'error');
+      } catch (e) {
+        setEnterpriseStatus(`接口调用失败: ${e.message}`, '#ff6b6b');
+        setEnterpriseResult({ error: e.message });
+        addLog(`❌ 企业接口调用失败: ${e.message}`, 'error');
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    function buildCurlFromEnterpriseUI() {
+      const { preset, pathWithQuery, bodyObj } = buildEnterpriseRequestFromUI();
+      const fullUrl = `${window.location.origin}${pathWithQuery}`;
+      const pieces = [`curl -X ${preset.method} '${fullUrl}'`];
+      if (!['GET', 'HEAD'].includes(preset.method) && preset.bodyType !== 'multipart') {
+        const payload = JSON.stringify(bodyObj || {}).replace(/'/g, `'\"'\"'`);
+        pieces.push(`-H 'Content-Type: application/json'`);
+        pieces.push(`-d '${payload}'`);
+      }
+      return pieces.join(' ');
+    }
+
+    async function copyEnterpriseCurl() {
+      try {
+        const cmd = buildCurlFromEnterpriseUI();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(cmd);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = cmd;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        setEnterpriseStatus('已复制 cURL 到剪贴板', '#00ff88');
+      } catch (e) {
+        setEnterpriseStatus(`复制失败: ${e.message}`, '#ff6b6b');
+      }
+    }
+
+    async function refreshEnterpriseDashboard() {
+      const queries = [
+        { key: 'health', url: '/health' },
+        { key: 'progression', url: '/agents/progression' },
+        { key: 'knowledge', url: '/knowledge/list?limit=5' },
+        { key: 'campaigns', url: '/campaigns?limit=5' },
+        { key: 'regressions', url: '/regressions/reports?limit=5' },
+        { key: 'incidents', url: '/alerts/incidents?limit=5' },
+        { key: 'audit', url: '/audit/logs?limit=5' },
+      ];
+
+      setEnterpriseStatus('正在刷新关键看板...', '#00d4ff');
+      try {
+        const results = await Promise.all(
+          queries.map(async item => {
+            const res = await fetch(item.url);
+            const data = await res.json();
+            return { key: item.key, ok: res.ok, status: res.status, data };
+          })
+        );
+
+        const byKey = {};
+        results.forEach(item => { byKey[item.key] = item; });
+        const summary = {
+          refreshed_at: new Date().toISOString(),
+          health: byKey.health?.data || {},
+          total_agents: byKey.progression?.data?.total_agents || 0,
+          knowledge_version: byKey.knowledge?.data?.version || byKey.knowledge?.data?.knowledge_version || 0,
+          campaigns: (byKey.campaigns?.data?.campaigns || []).length,
+          regression_reports: (byKey.regressions?.data?.reports || []).length,
+          open_incidents: (byKey.incidents?.data?.incidents || []).length,
+          audit_logs: (byKey.audit?.data?.logs || []).length
+        };
+        setEnterpriseResult({ summary, raw: byKey });
+        setEnterpriseStatus('关键看板刷新完成', '#00ff88');
+        addLog('🏢 企业关键看板已刷新', 'success');
+      } catch (e) {
+        setEnterpriseStatus(`刷新失败: ${e.message}`, '#ff6b6b');
+        setEnterpriseResult({ error: e.message });
+        addLog(`❌ 企业看板刷新失败: ${e.message}`, 'error');
+      }
+    }
+
+    function clearEnterpriseResult() {
+      setEnterpriseResult('等待调用...');
+      setEnterpriseStatus('已清空结果', '#5a8aaa');
+    }
+
+    function initEnterpriseApiConsole() {
+      const select = document.getElementById('enterprisePreset');
+      const runBtn = document.getElementById('enterpriseRunBtn');
+      const copyBtn = document.getElementById('enterpriseCopyCurlBtn');
+      const refreshBtn = document.getElementById('enterpriseRefreshBtn');
+      const clearBtn = document.getElementById('enterpriseClearBtn');
+      if (!select) return;
+
+      select.innerHTML = '';
+      ENTERPRISE_API_PRESETS.forEach((preset, idx) => {
+        const option = document.createElement('option');
+        option.value = String(idx);
+        option.textContent = `[${preset.method}] ${preset.path} · ${preset.label}`;
+        select.appendChild(option);
+      });
+
+      select.addEventListener('change', onEnterprisePresetChange);
+      if (runBtn) runBtn.addEventListener('click', runEnterpriseApiRequest);
+      if (copyBtn) copyBtn.addEventListener('click', copyEnterpriseCurl);
+      if (refreshBtn) refreshBtn.addEventListener('click', refreshEnterpriseDashboard);
+      if (clearBtn) clearBtn.addEventListener('click', clearEnterpriseResult);
+      onEnterprisePresetChange();
     }
 
     // ========== 知识投喂 ==========
