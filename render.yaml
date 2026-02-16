@@ -3,9 +3,11 @@ services:
     name: digital-twin-risk-demo
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 600
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: MAX_DOC_UPLOAD_MB
+        value: 1024
       - key: GEMINI_API_KEY
         sync: false

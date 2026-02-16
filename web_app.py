@@ -5,6 +5,10 @@
 """
 
 from flask import Flask, Response, jsonify, render_template, request
+import csv
+import io
+import json
+import os
 import random
 import time
 
@@ -12,6 +16,11 @@ try:
     from flask_compress import Compress
 except Exception:  # noqa: BLE001
     Compress = None
+
+try:
+    from pypdf import PdfReader
+except Exception:  # noqa: BLE001
+    PdfReader = None
 
 from config import API_CONFIG
 from config_store import CONFIG_STORE
@@ -43,6 +52,22 @@ from regression_reporting import (
 )
 
 app = Flask(__name__)
+try:
+    _env_upload_mb = int(os.getenv("MAX_DOC_UPLOAD_MB", "1024"))
+except (TypeError, ValueError):
+    _env_upload_mb = 1024
+MAX_DOC_UPLOAD_MB = max(64, _env_upload_mb)
+ALLOWED_DOC_EXTENSIONS = {
+    ".txt",
+    ".md",
+    ".markdown",
+    ".csv",
+    ".json",
+    ".jsonl",
+    ".pdf",
+}
+app.config["MAX_CONTENT_LENGTH"] = MAX_DOC_UPLOAD_MB * 1024 * 1024
+
 if Compress:
     app.config["COMPRESS_LEVEL"] = 6
     app.config["COMPRESS_MIN_SIZE"] = 500
@@ -177,6 +202,165 @@ def _extract_rules_payload(data: dict):
     return rules, source_snapshot_id
 
 
+def _parse_tags(tags_raw):
+    if isinstance(tags_raw, str):
+        tags = [t.strip() for t in tags_raw.replace("，", ",").split(",") if t.strip()]
+    elif isinstance(tags_raw, list):
+        tags = [str(t).strip() for t in tags_raw if str(t).strip()]
+    else:
+        tags = []
+    return tags
+
+
+def _iter_text_items(text: str):
+    if not text:
+        return
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line:
+            yield line
+
+
+def _iter_document_items(file_storage, ext: str, feed_type: str):
+    ext = (ext or "").lower()
+    stream = file_storage.stream
+    stream.seek(0)
+
+    if ext == ".pdf":
+        if PdfReader is None:
+            raise ValueError("服务端未安装 pypdf，暂不支持PDF解析")
+        reader = PdfReader(stream)
+        for page in reader.pages:
+            text = (page.extract_text() or "").strip()
+            for item in _iter_text_items(text):
+                yield item
+        return
+
+    if ext == ".csv":
+        wrapper = io.TextIOWrapper(stream, encoding="utf-8", errors="ignore", newline="")
+        reader = csv.reader(wrapper)
+        for row in reader:
+            cells = [str(cell).strip() for cell in row if str(cell).strip()]
+            if not cells:
+                continue
+            if feed_type == "cases":
+                if len(cells) >= 2:
+                    yield {
+                        "original": cells[0],
+                        "bypass": cells[1],
+                        "technique": cells[2] if len(cells) >= 3 else "文档案例",
+                    }
+                continue
+            if feed_type == "slang":
+                if len(cells) >= 2:
+                    yield f"{cells[0]}={cells[1]}"
+                else:
+                    yield cells[0]
+                continue
+            yield " ".join(cells)
+        return
+
+    if ext == ".jsonl":
+        wrapper = io.TextIOWrapper(stream, encoding="utf-8", errors="ignore")
+        for line in wrapper:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                payload = line
+            yield payload
+        return
+
+    if ext == ".json":
+        raw = stream.read()
+        text = raw.decode("utf-8", errors="ignore")
+        try:
+            payload = json.loads(text)
+            if isinstance(payload, list):
+                for item in payload:
+                    yield item
+                return
+            if isinstance(payload, dict):
+                items = payload.get("items")
+                if isinstance(items, list):
+                    for item in items:
+                        yield item
+                    return
+                yield payload
+                return
+        except json.JSONDecodeError:
+            pass
+        for item in _iter_text_items(text):
+            yield item
+        return
+
+    wrapper = io.TextIOWrapper(stream, encoding="utf-8", errors="ignore")
+    for line in wrapper:
+        line = line.strip()
+        if line:
+            yield line
+
+
+def _normalize_document_item(item, feed_type: str):
+    if feed_type == "materials":
+        if isinstance(item, dict):
+            text = (
+                item.get("text")
+                or item.get("content")
+                or item.get("bypass")
+                or item.get("original")
+                or ""
+            )
+            return str(text).strip() or None
+        if isinstance(item, str):
+            return item.strip() or None
+        return str(item).strip() or None
+
+    if feed_type == "slang":
+        if isinstance(item, dict):
+            term = str(item.get("term", "")).strip()
+            meaning = str(item.get("meaning", "")).strip()
+            if term:
+                return f"{term}={meaning}" if meaning else term
+            text = item.get("text") or item.get("content")
+            return str(text).strip() or None
+        if isinstance(item, str):
+            return item.strip() or None
+        return str(item).strip() or None
+
+    if feed_type == "cases":
+        if isinstance(item, dict):
+            bypass = str(item.get("bypass", "")).strip()
+            original = str(item.get("original", "")).strip()
+            technique = str(item.get("technique", "文档案例")).strip() or "文档案例"
+            if bypass:
+                return {"original": original, "bypass": bypass, "technique": technique}
+            text = str(item.get("text") or item.get("content") or "").strip()
+            if text:
+                return {"original": "", "bypass": text, "technique": technique}
+            return None
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                return {"original": "", "bypass": text, "technique": "文档案例"}
+            return None
+    return None
+
+
+def _feed_batch(feed_type: str, items: list, category: str, source: str, tags: list) -> int:
+    if not items:
+        return 0
+    if feed_type == "materials":
+        return KNOWLEDGE_STORE.feed_materials(items, category=category, source=source, tags=tags)
+    if feed_type == "slang":
+        return KNOWLEDGE_STORE.feed_slang(items, source=source, tags=tags)
+    if feed_type == "cases":
+        return KNOWLEDGE_STORE.feed_cases(items, source=source, tags=tags)
+    return 0
+
+
 @app.after_request
 def apply_response_headers(response):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -186,6 +370,11 @@ def apply_response_headers(response):
     elif request.path.startswith("/events"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.errorhandler(413)
+def handle_payload_too_large(_exc):
+    return jsonify({"error": f"文件太大，当前上限 {MAX_DOC_UPLOAD_MB}MB"}), 413
 
 # ============================================================================
 # API路由
@@ -198,7 +387,8 @@ def index():
         personas=get_all_personas(),
         relations=USER_RELATIONS,
         provider=API_CONFIG.get("provider", "gemini"),
-        community_config=COMMUNITY_CONFIG
+        community_config=COMMUNITY_CONFIG,
+        doc_upload_max_mb=MAX_DOC_UPLOAD_MB,
     )
 
 
@@ -844,13 +1034,7 @@ def feed_knowledge():
     items = data.get("items", [])
     source = (data.get("source") or "manual").strip()
     category = (data.get("category") or "通用").strip()
-    tags_raw = data.get("tags", [])
-    if isinstance(tags_raw, str):
-        tags = [t.strip() for t in tags_raw.replace("，", ",").split(",") if t.strip()]
-    elif isinstance(tags_raw, list):
-        tags = [str(t).strip() for t in tags_raw if str(t).strip()]
-    else:
-        tags = []
+    tags = _parse_tags(data.get("tags", []))
     
     result = {"fed_count": 0, "type": feed_type}
     
@@ -912,6 +1096,93 @@ def feed_knowledge():
     result["knowledge_version"] = KNOWLEDGE_STORE.version
     result["summary"] = KNOWLEDGE_STORE.get_summary()
     return jsonify(result)
+
+
+@app.post("/knowledge/feed/document")
+def feed_knowledge_document():
+    """
+    文档投喂入口（multipart/form-data）：
+    - 支持 txt/md/csv/json/jsonl/pdf
+    - 服务端解析并分批写入知识库，避免前端大文本卡顿
+    """
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "缺少上传文件(file)"}), 400
+
+    filename = os.path.basename(upload.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_DOC_EXTENSIONS:
+        return jsonify({"error": f"不支持的文件类型: {ext}"}), 400
+
+    feed_type = (request.form.get("type") or "materials").strip().lower()
+    if feed_type not in {"materials", "slang", "cases"}:
+        return jsonify({"error": "type 必须是 materials/slang/cases"}), 400
+
+    category = (request.form.get("category") or "文档投喂").strip()
+    source = (request.form.get("source") or f"upload:{filename}").strip()
+    tags = _parse_tags(request.form.get("tags", ""))
+    batch_size = request.form.get("batch_size", default=120, type=int)
+    batch_size = max(10, min(int(batch_size or 120), 1000))
+
+    parsed_count = 0
+    fed_count = 0
+    batch_count = 0
+    batch = []
+
+    try:
+        for raw_item in _iter_document_items(upload, ext, feed_type):
+            item = _normalize_document_item(raw_item, feed_type)
+            if item is None:
+                continue
+            parsed_count += 1
+            batch.append(item)
+
+            if len(batch) >= batch_size:
+                fed_count += _feed_batch(feed_type, batch, category, source, tags)
+                batch_count += 1
+                batch = []
+
+        if batch:
+            fed_count += _feed_batch(feed_type, batch, category, source, tags)
+            batch_count += 1
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"文档解析失败: {exc}"}), 500
+
+    absorb_knowledge_for_all_agents(
+        feed_type=feed_type,
+        item_count=fed_count,
+        category=category,
+        tags=tags,
+    )
+    EVENT_BUS.emit(
+        "knowledge_fed",
+        {
+            "type": feed_type,
+            "count": fed_count,
+            "source": source,
+            "category": category,
+            "tags": tags,
+            "message": f"文档投喂完成: {filename} -> {fed_count}条",
+        },
+    )
+
+    return jsonify(
+        {
+            "status": "ok",
+            "filename": filename,
+            "extension": ext,
+            "feed_type": feed_type,
+            "parsed_count": parsed_count,
+            "fed_count": fed_count,
+            "batch_count": batch_count,
+            "batch_size": batch_size,
+            "max_upload_mb": MAX_DOC_UPLOAD_MB,
+            "knowledge_version": KNOWLEDGE_STORE.version,
+            "summary": KNOWLEDGE_STORE.get_summary(),
+        }
+    )
 
 
 @app.get("/knowledge/list")

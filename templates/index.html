@@ -160,12 +160,14 @@
       position: fixed;
       top: calc(var(--top-bar-height) + 14px);
       left: 12px;
-      width: 160px;
+      width: 280px;
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
       border-radius: 12px;
       padding: 14px;
       z-index: 100;
+      max-height: 240px;
+      overflow-y: auto;
       backdrop-filter: blur(20px);
       box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(0, 200, 255, 0.1);
     }
@@ -227,6 +229,116 @@
       background: rgba(0, 0, 0, 0.3);
       padding: 2px 6px;
       border-radius: 10px;
+    }
+
+    .doc-feed-panel {
+      position: fixed;
+      top: calc(var(--top-bar-height) + 266px);
+      left: 12px;
+      width: 280px;
+      max-height: calc(100vh - var(--top-bar-height) - 282px);
+      overflow-y: auto;
+      background: var(--panel-bg);
+      border: 1px solid rgba(204, 102, 255, 0.4);
+      border-radius: 12px;
+      padding: 14px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(204, 102, 255, 0.15);
+    }
+
+    .doc-feed-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .doc-feed-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .doc-feed-field-full {
+      grid-column: 1 / -1;
+    }
+
+    .doc-feed-label {
+      font-size: 9px;
+      color: #7f9ed1;
+      letter-spacing: 1px;
+    }
+
+    .doc-feed-input,
+    .doc-feed-select {
+      width: 100%;
+      background: rgba(0, 20, 40, 0.86);
+      border: 1px solid rgba(204, 102, 255, 0.35);
+      border-radius: 6px;
+      color: #e0f8ff;
+      font-size: 11px;
+      padding: 7px 8px;
+      outline: none;
+    }
+
+    .doc-feed-input:focus,
+    .doc-feed-select:focus {
+      border-color: #cc66ff;
+      box-shadow: 0 0 14px rgba(204, 102, 255, 0.25);
+    }
+
+    .doc-feed-file {
+      width: 100%;
+      color: #9dc3d8;
+      font-size: 10px;
+    }
+
+    .doc-feed-file::file-selector-button {
+      margin-right: 8px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(204, 102, 255, 0.4);
+      background: rgba(40, 20, 70, 0.6);
+      color: #d6b8ff;
+      cursor: pointer;
+    }
+
+    .doc-feed-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .doc-feed-progress {
+      margin-top: 8px;
+      width: 100%;
+      height: 6px;
+      background: rgba(30, 20, 50, 0.65);
+      border-radius: 999px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .doc-feed-progress-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #cc66ff 0%, #00d4ff 100%);
+      transition: width 0.2s ease;
+    }
+
+    .doc-feed-progress-text {
+      margin-top: 4px;
+      font-size: 9px;
+      color: #8da8dc;
+      min-height: 12px;
+    }
+
+    .doc-feed-status {
+      font-size: 9px;
+      color: #5a8aaa;
+      margin-top: 4px;
+      line-height: 1.45;
     }
 
     /* 右侧控制面板 */
@@ -977,6 +1089,11 @@
       .control-panel {
         width: 300px;
       }
+
+      .filter-panel,
+      .doc-feed-panel {
+        width: 236px;
+      }
     }
 
     @media (max-width: 860px) {
@@ -1032,6 +1149,15 @@
         padding: 10px;
         max-height: 110px;
         overflow-y: auto;
+      }
+
+      .doc-feed-panel {
+        left: 8px;
+        right: 8px;
+        width: auto;
+        top: calc(var(--top-bar-height) + 128px);
+        max-height: 25vh;
+        padding: 10px;
       }
 
       .filter-title {
@@ -1136,6 +1262,58 @@
   <div class="filter-panel">
     <div class="filter-title">User Categories</div>
     <div id="filterList"></div>
+  </div>
+
+  <div class="doc-feed-panel">
+    <div class="filter-title">Document Feed</div>
+    <div class="doc-feed-grid">
+      <div class="doc-feed-field">
+        <label class="doc-feed-label" for="docFeedType">投喂类型</label>
+        <select class="doc-feed-select" id="docFeedType" onchange="switchFeedTab(this.value)">
+          <option value="materials" selected>文本样本</option>
+          <option value="slang">黑话映射</option>
+          <option value="cases">绕过案例</option>
+        </select>
+      </div>
+      <div class="doc-feed-field">
+        <label class="doc-feed-label" for="docFeedBatchSize">批次大小</label>
+        <input class="doc-feed-input" type="number" id="docFeedBatchSize" value="160" min="10" max="1000" />
+      </div>
+      <div class="doc-feed-field doc-feed-field-full">
+        <label class="doc-feed-label" for="docFeedCategory">资料分类</label>
+        <input class="doc-feed-input" id="docFeedCategory" placeholder="例如：行业黑话、语义绕过样本" value="文档投喂" />
+      </div>
+      <div class="doc-feed-field doc-feed-field-full">
+        <label class="doc-feed-label" for="docFeedSource">来源标识 (可选)</label>
+        <input class="doc-feed-input" id="docFeedSource" placeholder="例如：安全团队语料库_2026Q1" />
+      </div>
+      <div class="doc-feed-field doc-feed-field-full">
+        <label class="doc-feed-label" for="docFeedTags">标签 (逗号分隔，可选)</label>
+        <input class="doc-feed-input" id="docFeedTags" placeholder="例如：高危,线上反馈,新型隐喻" />
+      </div>
+      <div class="doc-feed-field doc-feed-field-full">
+        <label class="doc-feed-label" for="docFeedFile">上传文档</label>
+        <input class="doc-feed-file" id="docFeedFile" type="file"
+          accept=".txt,.md,.markdown,.csv,.json,.jsonl,.pdf,application/pdf,text/plain,text/csv,application/json" />
+      </div>
+    </div>
+    <div class="doc-feed-actions">
+      <button class="btn btn-secondary" id="docFeedSubmitBtn"
+        style="padding:7px 12px;font-size:10px;border-color:#cc66ff;color:#cc66ff;flex:1;" onclick="submitDocumentFeed()">
+        📤 上传文档
+      </button>
+      <button class="btn btn-secondary" style="padding:7px 12px;font-size:10px;flex:1;"
+        onclick="document.getElementById('docFeedFile').value=''; setDocFeedProgress(null);">
+        清除文件
+      </button>
+    </div>
+    <div class="doc-feed-progress" id="docFeedProgress">
+      <div class="doc-feed-progress-fill" id="docFeedProgressFill"></div>
+    </div>
+    <div class="doc-feed-progress-text" id="docFeedProgressText"></div>
+    <div class="doc-feed-status" id="docFeedStatus">
+      支持 PDF/TXT/MD/CSV/JSON/JSONL，单文件上限 {{ doc_upload_max_mb }}MB
+    </div>
   </div>
 
   <!-- 右侧控制面板 -->
@@ -1486,6 +1664,7 @@
     const personas = {{ personas | tojson }};
     let relationsData = {{ relations | tojson }};
     const communityConfig = {{ community_config | tojson }} || {};
+    const docUploadMaxMb = Number({{ doc_upload_max_mb | tojson }}) || 300;
 
     let nodesData = [];
     let edgesData = [];
@@ -4613,15 +4792,54 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     // ========== 知识投喂 ==========
     let currentFeedType = 'materials';
 
+    function setFeedStatusText(text, color = '#00ff88') {
+      const statusEl = document.getElementById('feedStatus');
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      statusEl.style.color = color;
+    }
+
+    function setDocFeedStatusText(text, color = '#5a8aaa') {
+      const statusEl = document.getElementById('docFeedStatus');
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      statusEl.style.color = color;
+    }
+
+    function setDocFeedProgress(percent = null, text = '') {
+      const progressEl = document.getElementById('docFeedProgress');
+      const fillEl = document.getElementById('docFeedProgressFill');
+      const textEl = document.getElementById('docFeedProgressText');
+      if (!progressEl || !fillEl || !textEl) return;
+
+      if (percent === null || Number.isNaN(Number(percent))) {
+        progressEl.style.display = 'none';
+        fillEl.style.width = '0%';
+        textEl.textContent = text || '';
+        return;
+      }
+
+      const safePercent = Math.max(0, Math.min(Number(percent), 100));
+      progressEl.style.display = 'block';
+      fillEl.style.width = `${safePercent}%`;
+      textEl.textContent = text || `上传中 ${safePercent.toFixed(0)}%`;
+    }
+
     function switchFeedTab(type) {
       currentFeedType = type;
       const ta = document.getElementById('feedContent');
+      const docTypeEl = document.getElementById('docFeedType');
       const placeholders = {
         materials: '每行一条文本样本，例如：\n瓶子今天又讲话了\n赵家人割韭菜\n翠翠翠\n大的要来了',
         slang: '每行一条黑话，格式：词=含义，例如：\n翠=两个习字暗示死\n瓶子=习近平\n润=移民出国\n铁拳=政府管控',
         cases: '每行一条绕过案例，例如：\n用"西方不亮东方亮"隐喻言论管控\n用emoji替换敏感字：🐻=领导人'
       };
-      ta.placeholder = placeholders[type] || placeholders.materials;
+      if (ta) {
+        ta.placeholder = placeholders[type] || placeholders.materials;
+      }
+      if (docTypeEl && docTypeEl.value !== type) {
+        docTypeEl.value = type;
+      }
       // 高亮当前tab
       ['Materials', 'Slang', 'Cases'].forEach(t => {
         const btn = document.getElementById('feedTab' + t);
@@ -4640,9 +4858,8 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
           body: JSON.stringify({ type: currentFeedType, content })
         });
         const data = await res.json();
-        document.getElementById('feedStatus').textContent =
-          `✅ 已投喂 ${data.fed_count} 条${currentFeedType}资料 (v${data.knowledge_version || 0})`;
-        document.getElementById('feedStatus').style.color = '#00ff88';
+        if (!res.ok) throw new Error(data.error || `投喂失败(${res.status})`);
+        setFeedStatusText(`✅ 已投喂 ${data.fed_count} 条${currentFeedType}资料 (v${data.knowledge_version || 0})`, '#00ff88');
         document.getElementById('feedContent').value = '';
         addLog(`📚 投喂了 ${data.fed_count} 条 ${currentFeedType} 资料`, 'success');
       } catch (e) {
@@ -4650,16 +4867,115 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       }
     }
 
+    function submitDocumentFeed() {
+      const fileInput = document.getElementById('docFeedFile');
+      const submitBtn = document.getElementById('docFeedSubmitBtn');
+      if (!fileInput || !submitBtn) return;
+
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        addLog('❌ 请先选择文档', 'error');
+        return;
+      }
+
+      const maxBytes = docUploadMaxMb * 1024 * 1024;
+      if (docUploadMaxMb > 0 && file.size > maxBytes) {
+        addLog(`❌ 文件过大: ${(file.size / 1024 / 1024).toFixed(1)}MB > ${docUploadMaxMb}MB`, 'error');
+        setDocFeedStatusText(`文件过大，当前上限 ${docUploadMaxMb}MB`, '#ff6b6b');
+        return;
+      }
+
+      const feedType = (document.getElementById('docFeedType')?.value || currentFeedType || 'materials').trim();
+      const category = (document.getElementById('docFeedCategory')?.value || '文档投喂').trim() || '文档投喂';
+      const source = (document.getElementById('docFeedSource')?.value || '').trim();
+      const tags = (document.getElementById('docFeedTags')?.value || '').trim();
+      const batchSizeRaw = Number(document.getElementById('docFeedBatchSize')?.value || 160);
+      const batchSize = Number.isFinite(batchSizeRaw) ? Math.max(10, Math.min(batchSizeRaw, 1000)) : 160;
+
+      switchFeedTab(feedType);
+      submitBtn.disabled = true;
+      setDocFeedProgress(0, '准备上传...');
+      setDocFeedStatusText(`正在上传 ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) ...`, '#00d4ff');
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', feedType);
+      formData.append('category', category);
+      formData.append('source', source || `upload:${file.name}`);
+      formData.append('tags', tags);
+      formData.append('batch_size', String(batchSize));
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/knowledge/feed/document', true);
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          setDocFeedProgress(40, '上传中 ...');
+          return;
+        }
+        const percent = (event.loaded / event.total) * 100;
+        setDocFeedProgress(percent, `上传中 ${percent.toFixed(0)}%`);
+      };
+
+      xhr.onload = () => {
+        submitBtn.disabled = false;
+        let data = {};
+        try {
+          data = JSON.parse(xhr.responseText || '{}');
+        } catch (e) {
+          data = { error: `返回结果解析失败: ${e.message}` };
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setDocFeedProgress(100, `完成: 解析 ${data.parsed_count || 0} 条，入库 ${data.fed_count || 0} 条`);
+          setDocFeedStatusText(
+            `✅ ${data.filename || file.name} 已完成，入库 ${data.fed_count || 0} 条 (v${data.knowledge_version || 0})`,
+            '#00ff88'
+          );
+          setFeedStatusText(`✅ 文档投喂成功 ${data.fed_count || 0} 条 (${feedType})`, '#00ff88');
+          fileInput.value = '';
+          addLog(
+            `📚 文档投喂成功: ${data.filename || file.name}, 解析${data.parsed_count || 0}条, 入库${data.fed_count || 0}条`,
+            'success'
+          );
+        } else {
+          const errorMsg = data.error || `上传失败(${xhr.status})`;
+          setDocFeedStatusText(`❌ ${errorMsg}`, '#ff6b6b');
+          setDocFeedProgress(null, '');
+          addLog(`❌ 文档投喂失败: ${errorMsg}`, 'error');
+        }
+      };
+
+      xhr.onerror = () => {
+        submitBtn.disabled = false;
+        setDocFeedStatusText('❌ 网络错误，上传失败', '#ff6b6b');
+        setDocFeedProgress(null, '');
+        addLog('❌ 文档投喂失败: 网络错误', 'error');
+      };
+
+      xhr.onabort = () => {
+        submitBtn.disabled = false;
+        setDocFeedStatusText('⚠️ 上传已取消', '#ffaa00');
+        setDocFeedProgress(null, '');
+        addLog('⚠️ 文档上传已取消', 'warning');
+      };
+
+      xhr.send(formData);
+    }
+
     async function clearFeedKnowledge() {
       try {
         await fetch('/knowledge/clear', { method: 'POST' });
-        document.getElementById('feedStatus').textContent = '暂无投喂资料';
-        document.getElementById('feedStatus').style.color = '#5a8aaa';
+        setFeedStatusText('暂无投喂资料', '#5a8aaa');
+        setDocFeedStatusText(`支持 PDF/TXT/MD/CSV/JSON/JSONL，单文件上限 ${docUploadMaxMb}MB`, '#5a8aaa');
+        setDocFeedProgress(null, '');
         addLog('🗑️ 已清空投喂资料', 'warning');
       } catch (e) {
         addLog('❌ 清空失败: ' + e.message, 'error');
       }
     }
+
+    switchFeedTab(currentFeedType);
 
     function closeModal() { document.getElementById('modalOverlay').classList.remove('show'); }
     document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target.id === 'modalOverlay') closeModal(); });
