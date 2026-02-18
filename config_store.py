@@ -1415,17 +1415,13 @@ class ConfigStore:
         conn.commit()
 
     def _bootstrap_personas(self, conn: sqlite3.Connection, default_personas: List[dict]):
-        row = conn.execute("SELECT COUNT(1) AS c FROM personas").fetchone()
-        if row and row["c"] > 0:
-            return
-
         now = time.time()
         for persona in default_personas:
             if not persona.get("id"):
                 continue
             conn.execute(
                 """
-                INSERT INTO personas (persona_id, payload, created_at, updated_at)
+                INSERT OR REPLACE INTO personas (persona_id, payload, created_at, updated_at)
                 VALUES (?, ?, ?, ?)
                 """,
                 (persona["id"], json.dumps(persona, ensure_ascii=False), now, now),
@@ -1433,10 +1429,6 @@ class ConfigStore:
         conn.commit()
 
     def _bootstrap_techniques(self, conn: sqlite3.Connection, default_techniques: Dict[str, dict]):
-        row = conn.execute("SELECT COUNT(1) AS c FROM techniques").fetchone()
-        if row and row["c"] > 0:
-            return
-
         now = time.time()
         for category, techniques in (default_techniques or {}).items():
             if not isinstance(techniques, dict):
@@ -1447,7 +1439,7 @@ class ConfigStore:
                 record["category"] = category
                 conn.execute(
                     """
-                    INSERT INTO techniques (technique_name, category, payload, created_at, updated_at)
+                    INSERT OR REPLACE INTO techniques (technique_name, category, payload, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     (name, category, json.dumps(record, ensure_ascii=False), now, now),
