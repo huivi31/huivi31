@@ -1269,27 +1269,137 @@
       background: linear-gradient(180deg, rgba(0, 220, 255, 0.7), rgba(0, 130, 255, 0.6));
     }
 
-    /* === 2D 屏幕涟漪效果 === */
-    .screen-ripple {
+    /* === Cyber Pulse 科幻点击特效 === */
+    .cyber-hex-ring {
       position: fixed;
-      border-radius: 50%;
       pointer-events: none;
       z-index: 9999;
-      border: 2px solid;
-      animation: screenRippleAnim 0.6s cubic-bezier(0, 0.5, 0.3, 1) forwards;
+      border: 1.5px solid;
+      clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+      animation: cyberHexExpand 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      transform: translate(-50%, -50%);
     }
 
-    @keyframes screenRippleAnim {
+    @keyframes cyberHexExpand {
       0% {
-        width: 10px;
-        height: 10px;
-        opacity: 0.9;
+        width: 6px;
+        height: 6px;
+        opacity: 1;
+        filter: blur(0px);
+      }
+
+      60% {
+        opacity: 0.6;
       }
 
       100% {
-        width: 120px;
-        height: 120px;
+        width: 160px;
+        height: 160px;
         opacity: 0;
+        filter: blur(2px);
+      }
+    }
+
+    .cyber-data-particle {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9998;
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      font-weight: bold;
+      text-shadow: 0 0 6px currentColor;
+      animation: cyberParticleFly 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes cyberParticleFly {
+      0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+      }
+
+      100% {
+        opacity: 0;
+        transform: translate(var(--dx), var(--dy)) scale(0.3);
+      }
+    }
+
+    .cyber-scan-line {
+      position: fixed;
+      left: 0;
+      width: 100vw;
+      height: 2px;
+      pointer-events: none;
+      z-index: 9997;
+      animation: cyberScanSweep 0.5s ease-out forwards;
+    }
+
+    @keyframes cyberScanSweep {
+      0% {
+        opacity: 0.8;
+        transform: scaleX(0);
+        transform-origin: center;
+      }
+
+      50% {
+        opacity: 0.6;
+        transform: scaleX(1);
+      }
+
+      100% {
+        opacity: 0;
+        transform: scaleX(1);
+      }
+    }
+
+    .cyber-crosshair {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      animation: cyberCrosshairPulse 0.6s ease-out forwards;
+    }
+
+    .cyber-crosshair::before,
+    .cyber-crosshair::after {
+      content: '';
+      position: absolute;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .cyber-crosshair::before {
+      width: 20px;
+      height: 1px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .cyber-crosshair::after {
+      width: 1px;
+      height: 20px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    @keyframes cyberCrosshairPulse {
+      0% {
+        opacity: 1;
+        width: 30px;
+        height: 30px;
+      }
+
+      50% {
+        opacity: 0.8;
+        width: 40px;
+        height: 40px;
+      }
+
+      100% {
+        opacity: 0;
+        width: 50px;
+        height: 50px;
       }
     }
 
@@ -2009,17 +2119,30 @@
     let pendingHoverEvent = null;
     let resizeDebounceTimer = null;
 
-    // Sci-Fi 蓝调色板 - 统一科技蓝风格
+    // 每类别独立色 - 一眼区分不同攻击专家
     const categoryColors = {
-      '正常用户': 0x00d4ff,
-      '边缘表达': 0x00a0ff,
-      '风险信号': 0x0088ff,
-      '对抗测试': 0x0070ff,
-      '监督审查': 0x00b0ff,
-      // 兼容旧类别（保留以避免历史数据报错）
-      '青少年': 0x00d4ff, '键政': 0x0088ff, '攻击者': 0x0066cc,
-      '水军': 0x0099ff, '灰黑产': 0x0055ff, '情感': 0x00aaff,
-      '学术': 0x0077ff, '正常': 0x0044aa, '边缘': 0x00bbff, '国际': 0x0066ff
+      '文字变形专家': 0x00e5ff,   // Electric Cyan
+      '隐喻暗示专家': 0xb388ff,   // Neon Purple
+      '多语言专家': 0x00e676,   // Emerald
+      '方言俚语专家': 0xffab40,   // Amber
+      '语境包装专家': 0xff4081,   // Hot Pink
+      '格式利用专家': 0xc6ff00,   // Lime
+      '综合高手': 0xffd740,   // Gold
+      '情感操纵专家': 0xff6e40,   // Deep Orange
+      '身份伪装专家': 0x64ffda,   // Teal
+      '时序与热点专家': 0x8c9eff, // Indigo
+      '认知战术专家': 0xff5252,   // Red Accent
+      '社会工程专家': 0xea80fc,   // Light Purple
+      '多模态专家': 0x84ffff,   // Cyan A100
+      '平台漏洞专家': 0xff80ab,   // Pink A100
+      '协同作战专家': 0xb9f6ca,   // Green A100
+      '对抗测试': 0x82b1ff,   // Blue A100
+      '监督审查': 0x80d8ff,   // Light Blue A100
+      // 兼容旧分类
+      '正常用户': 0x00d4ff, '边缘表达': 0x00a0ff, '风险信号': 0x448aff,
+      '青少年': 0x00d4ff, '键政': 0x448aff, '攻击者': 0x448aff,
+      '水军': 0x82b1ff, '灰黑产': 0x536dfe, '情感': 0xea80fc,
+      '学术': 0x80d8ff, '正常': 0x00d4ff, '边缘': 0x82b1ff, '国际': 0x448aff
     };
 
     const relationColors = {
@@ -2070,7 +2193,7 @@
     let rippleRings = [];
 
     const sphereRadius = 320;
-    const nodeSize = 5;
+    const nodeSize = 3.5;
     const gridPointSize = 1.5;   // 网格交叉点大小 - 非常小
 
     function applyRendererQuality() {
@@ -2335,33 +2458,39 @@
     }
 
     function createNodes() {
-      // 把Agent分布在几个纬度环上，更整齐美观
-      console.log(`准备放置 ${personas.length} 个Agent`);
+      // === Fibonacci 黄金角球面分布 + 类别聚簇 ===
+      console.log(`准备放置 ${personas.length} 个Agent（Fibonacci球面分布）`);
 
-      // 定义几个纬度环（从上到下）
-      const latitudes = [
-        { y: 0.85, count: 4 },   // 顶部环 - 4个
-        { y: 0.5, count: 6 },    // 上部环 - 6个
-        { y: 0.1, count: 8 },    // 中上环 - 8个
-        { y: -0.3, count: 6 },   // 中下环 - 6个
-        { y: -0.7, count: 2 }    // 底部环 - 2个
-      ];
+      // 1. 按类别分组
+      const categoryGroups = {};
+      personas.forEach(p => {
+        if (!categoryGroups[p.category]) categoryGroups[p.category] = [];
+        categoryGroups[p.category].push(p);
+      });
+      const categoryNames = Object.keys(categoryGroups);
+      const totalAgents = personas.length;
 
-      let personaIndex = 0;
+      // 2. 为每个类别分配经度扇区
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ~137.5°
+      let globalIndex = 0;
 
-      latitudes.forEach(ring => {
-        const y = ring.y * sphereRadius;
-        const ringRadius = Math.sqrt(sphereRadius * sphereRadius - y * y);
+      // 按类别顺序遍历，每个类别内部用Fibonacci偏移
+      categoryNames.forEach((catName, catIdx) => {
+        const group = categoryGroups[catName];
+        const sectorCenter = (catIdx / categoryNames.length) * Math.PI * 2;
 
-        for (let i = 0; i < ring.count && personaIndex < personas.length; i++) {
-          const persona = personas[personaIndex];
-          const angle = (i / ring.count) * Math.PI * 2;
+        group.forEach((persona, localIdx) => {
+          // Fibonacci球面均匀分布公式
+          const t = globalIndex / (totalAgents - 1 || 1); // 0..1
+          const phi = Math.acos(1 - 2 * t);               // 极角 0..π
+          const theta = sectorCenter + goldenAngle * globalIndex * 0.3; // 带聚簇的方位角
 
-          const x = ringRadius * Math.cos(angle);
-          const z = ringRadius * Math.sin(angle);
+          const x = sphereRadius * Math.sin(phi) * Math.cos(theta);
+          const y = sphereRadius * Math.cos(phi);
+          const z = sphereRadius * Math.sin(phi) * Math.sin(theta);
 
           const pos = new THREE.Vector3(x, y, z);
-          const color = categoryColors[persona.category] || 0x00d4ff;
+          const color = categoryColors[persona.category] || 0x40c4ff;
 
           const nodeData = {
             id: persona.id,
@@ -2381,11 +2510,11 @@
           nodeMeshes.push(mesh);
           geodesicGroup.add(mesh);
 
-          personaIndex++;
-        }
+          globalIndex++;
+        });
       });
 
-      console.log(`已放置 ${nodeMeshes.length} 个Agent`);
+      console.log(`已放置 ${nodeMeshes.length} 个Agent（共 ${categoryNames.length} 个类别）`);
     }
 
     function createNode(nodeData) {
@@ -2403,31 +2532,31 @@
       group.add(core);
 
       // 内层发光
-      const innerGlowGeo = new THREE.SphereGeometry(nodeSize * 1.5, seg, seg);
+      const innerGlowGeo = new THREE.SphereGeometry(nodeSize * 1.4, seg, seg);
       const innerGlowMat = new THREE.MeshBasicMaterial({
         color: nodeData.color,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.5,
         blending: THREE.AdditiveBlending
       });
       group.add(new THREE.Mesh(innerGlowGeo, innerGlowMat));
 
       // 外层光晕
-      const outerGlowGeo = new THREE.SphereGeometry(nodeSize * 2.5, outerSeg, outerSeg);
+      const outerGlowGeo = new THREE.SphereGeometry(nodeSize * 2, outerSeg, outerSeg);
       const outerGlowMat = new THREE.MeshBasicMaterial({
         color: nodeData.color,
         transparent: true,
-        opacity: 0.25,
+        opacity: 0.2,
         blending: THREE.AdditiveBlending
       });
       group.add(new THREE.Mesh(outerGlowGeo, outerGlowMat));
 
       // 最外层微弱光晕
-      const haloGeo = new THREE.SphereGeometry(nodeSize * 4, outerSeg, outerSeg);
+      const haloGeo = new THREE.SphereGeometry(nodeSize * 3, outerSeg, outerSeg);
       const haloMat = new THREE.MeshBasicMaterial({
         color: nodeData.color,
         transparent: true,
-        opacity: 0.1,
+        opacity: 0.08,
         blending: THREE.AdditiveBlending
       });
       group.add(new THREE.Mesh(haloGeo, haloMat));
@@ -4306,8 +4435,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     function createRippleEffect(position, color) {
       if (PERF_PROFILE.reducedMotion) return;
 
-      // ===== 2D 屏幕涟漪（精准定位到鼠标点击处）=====
-      // 将3D世界坐标投影到屏幕坐标
+      // ===== 投影到屏幕坐标 =====
       const screenPos = position.clone().project(camera);
       const cx = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
       const cy = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
@@ -4316,34 +4444,124 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
         ? '#' + color.toString(16).padStart(6, '0')
         : color;
 
-      const ringCount = PERF_PROFILE.lowPower ? 1 : 2;
-      for (let i = 0; i < ringCount; i++) {
+      // ===== 1. 六边形网格展开 =====
+      const hexCount = PERF_PROFILE.lowPower ? 1 : 3;
+      for (let i = 0; i < hexCount; i++) {
         setTimeout(() => {
-          const ripple = document.createElement('div');
-          ripple.className = 'screen-ripple';
-          ripple.style.left = cx + 'px';
-          ripple.style.top = cy + 'px';
-          ripple.style.borderColor = colorHex;
-          ripple.style.boxShadow = `0 0 12px ${colorHex}, inset 0 0 8px ${colorHex}`;
-          ripple.style.transform = 'translate(-50%, -50%)';
-          document.body.appendChild(ripple);
-          ripple.addEventListener('animationend', () => ripple.remove());
-        }, i * 100);
+          const hex = document.createElement('div');
+          hex.className = 'cyber-hex-ring';
+          hex.style.left = cx + 'px';
+          hex.style.top = cy + 'px';
+          hex.style.borderColor = colorHex;
+          hex.style.boxShadow = `0 0 15px ${colorHex}40, inset 0 0 10px ${colorHex}30`;
+          document.body.appendChild(hex);
+          hex.addEventListener('animationend', () => hex.remove());
+        }, i * 80);
       }
 
-      // ===== 3D 节点发光脉冲（在场景内给被点击的节点加发光效果）=====
-      // 找到被点击的 mesh 并让它短暂发光加亮
+      // ===== 2. 数据碎片喷射 =====
+      if (!PERF_PROFILE.lowPower) {
+        const fragments = ['0x3F', 'A7', '∅', '01', 'FF', '>>>', '⟁', '◈', '⬡', 'ERR', 'ACK', '█'];
+        const particleCount = PERF_PROFILE.lowPower ? 3 : 8;
+        for (let i = 0; i < particleCount; i++) {
+          setTimeout(() => {
+            const p = document.createElement('span');
+            p.className = 'cyber-data-particle';
+            p.textContent = fragments[Math.floor(Math.random() * fragments.length)];
+            p.style.left = cx + 'px';
+            p.style.top = cy + 'px';
+            p.style.color = colorHex;
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 40 + Math.random() * 80;
+            p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+            p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
+            document.body.appendChild(p);
+            p.addEventListener('animationend', () => p.remove());
+          }, Math.random() * 150);
+        }
+      }
+
+      // ===== 3. 精准十字准星 =====
+      const cross = document.createElement('div');
+      cross.className = 'cyber-crosshair';
+      cross.style.left = cx + 'px';
+      cross.style.top = cy + 'px';
+      cross.style.color = colorHex;
+      document.body.appendChild(cross);
+      cross.addEventListener('animationend', () => cross.remove());
+
+      // ===== 4. 水平扫描线 =====
+      const scan = document.createElement('div');
+      scan.className = 'cyber-scan-line';
+      scan.style.top = cy + 'px';
+      scan.style.background = `linear-gradient(90deg, transparent, ${colorHex}80, ${colorHex}, ${colorHex}80, transparent)`;
+      document.body.appendChild(scan);
+      scan.addEventListener('animationend', () => scan.remove());
+
+      // ===== 5. 3D 能量弧光连接邻居 =====
+      if (!PERF_PROFILE.lowPower) {
+        // 找2个最近的邻居节点
+        const distances = nodeMeshes
+          .filter(m => !m.position.equals(position))
+          .map(m => ({ mesh: m, dist: m.position.distanceTo(position) }))
+          .sort((a, b) => a.dist - b.dist)
+          .slice(0, 2);
+
+        distances.forEach(({ mesh: neighbor }) => {
+          const arcGeo = new THREE.BufferGeometry().setFromPoints([
+            position.clone(),
+            neighbor.position.clone()
+          ]);
+          const arcMat = new THREE.LineBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+          });
+          const arc = new THREE.Line(arcGeo, arcMat);
+          geodesicGroup.add(arc);
+
+          // 渐隐消失
+          let fadeStep = 0;
+          const fadeInterval = setInterval(() => {
+            fadeStep++;
+            arcMat.opacity = 0.8 * (1 - fadeStep / 20);
+            if (fadeStep >= 20) {
+              clearInterval(fadeInterval);
+              geodesicGroup.remove(arc);
+              arcGeo.dispose();
+              arcMat.dispose();
+            }
+          }, 25);
+        });
+      }
+
+      // ===== 6. 3D 节点冲击波 =====
       const targetMesh = nodeMeshes.find(m => m.position.equals(position));
-      if (targetMesh && targetMesh.material) {
-        const origEmissive = targetMesh.material.emissiveIntensity || 0;
+      if (targetMesh) {
         const origScale = targetMesh.scale.x;
-        targetMesh.material.emissiveIntensity = 1.5;
-        targetMesh.scale.setScalar(origScale * 1.15);
+        // 先放大+闪白
+        targetMesh.scale.setScalar(origScale * 1.4);
+        targetMesh.children.forEach(child => {
+          if (child.material) {
+            child.material._origColor = child.material.color.getHex();
+            child.material.color.setHex(0xffffff);
+          }
+        });
+
+        // 快速回弹
+        setTimeout(() => {
+          targetMesh.scale.setScalar(origScale * 1.1);
+          targetMesh.children.forEach(child => {
+            if (child.material && child.material._origColor !== undefined) {
+              child.material.color.setHex(child.material._origColor);
+            }
+          });
+        }, 120);
 
         setTimeout(() => {
-          targetMesh.material.emissiveIntensity = origEmissive;
           targetMesh.scale.setScalar(origScale);
-        }, 350);
+        }, 300);
       }
     }
 
