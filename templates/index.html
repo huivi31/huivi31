@@ -900,10 +900,10 @@
     }
 
     .report-stat {
-      background: rgba(0, 25, 50, 0.5);
-      border: 1px solid rgba(0, 200, 255, 0.15);
-      border-radius: 12px;
-      padding: 18px;
+      /* background: rgba(0, 25, 50, 0.5); */
+      /* border: 1px solid rgba(0, 200, 255, 0.15); */
+      /* border-radius: 12px; */
+      padding: 10px;
       text-align: center;
     }
 
@@ -927,11 +927,12 @@
     }
 
     .report-list li {
-      padding: 14px 18px;
-      margin-bottom: 10px;
-      background: rgba(0, 25, 50, 0.4);
-      border: 1px solid rgba(0, 200, 255, 0.1);
-      border-radius: 10px;
+      padding: 10px 0;
+      margin-bottom: 8px;
+      /* background: rgba(0, 25, 50, 0.4); */
+      /* border: 1px solid rgba(0, 200, 255, 0.1); */
+      /* border-radius: 10px; */
+      border-bottom: 1px solid rgba(0, 200, 255, 0.1);
       font-size: 13px;
       display: flex;
       align-items: center;
@@ -962,9 +963,9 @@
 
     .report-chart {
       height: 170px;
-      background: rgba(0, 25, 50, 0.35);
-      border-radius: 12px;
-      padding: 22px;
+      /* background: rgba(0, 25, 50, 0.35); */
+      /* border-radius: 12px; */
+      padding: 10px 0;
       display: flex;
       align-items: flex-end;
       gap: 14px;
@@ -1000,12 +1001,13 @@
       position: fixed;
       bottom: 18px;
       left: 18px;
-      background: rgba(0, 15, 30, 0.9);
-      border: 1px solid rgba(0, 200, 255, 0.2);
-      border-radius: 12px;
-      padding: 16px;
+      /* background: rgba(0, 15, 30, 0.9); */
+      /* border: 1px solid rgba(0, 200, 255, 0.2); */
+      /* border-radius: 12px; */
+      /* backdrop-filter: blur(20px); */
+      padding: 0;
       z-index: 100;
-      backdrop-filter: blur(20px);
+      pointer-events: none;
     }
 
     .legend-title {
@@ -1039,6 +1041,7 @@
 
     /* 3D 控制提示 */
     .controls-hint {
+      display: none;
       position: fixed;
       bottom: 130px;
       left: 18px;
@@ -1061,6 +1064,7 @@
 
     /* 风洞状态指示器 */
     .wind-tunnel-status {
+      display: none;
       position: fixed;
       bottom: 18px;
       left: 50%;
@@ -1269,138 +1273,8 @@
       background: linear-gradient(180deg, rgba(0, 220, 255, 0.7), rgba(0, 130, 255, 0.6));
     }
 
-    /* === Cyber Pulse 科幻点击特效 === */
-    .cyber-hex-ring {
-      position: fixed;
-      pointer-events: none;
-      z-index: 9999;
-      border: 1.5px solid;
-      clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
-      animation: cyberHexExpand 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      transform: translate(-50%, -50%);
-    }
-
-    @keyframes cyberHexExpand {
-      0% {
-        width: 6px;
-        height: 6px;
-        opacity: 1;
-        filter: blur(0px);
-      }
-
-      60% {
-        opacity: 0.6;
-      }
-
-      100% {
-        width: 160px;
-        height: 160px;
-        opacity: 0;
-        filter: blur(2px);
-      }
-    }
-
-    .cyber-data-particle {
-      position: fixed;
-      pointer-events: none;
-      z-index: 9998;
-      font-family: 'Courier New', monospace;
-      font-size: 10px;
-      font-weight: bold;
-      text-shadow: 0 0 6px currentColor;
-      animation: cyberParticleFly 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-    }
-
-    @keyframes cyberParticleFly {
-      0% {
-        opacity: 1;
-        transform: translate(0, 0) scale(1);
-      }
-
-      100% {
-        opacity: 0;
-        transform: translate(var(--dx), var(--dy)) scale(0.3);
-      }
-    }
-
-    .cyber-scan-line {
-      position: fixed;
-      left: 0;
-      width: 100vw;
-      height: 2px;
-      pointer-events: none;
-      z-index: 9997;
-      animation: cyberScanSweep 0.5s ease-out forwards;
-    }
-
-    @keyframes cyberScanSweep {
-      0% {
-        opacity: 0.8;
-        transform: scaleX(0);
-        transform-origin: center;
-      }
-
-      50% {
-        opacity: 0.6;
-        transform: scaleX(1);
-      }
-
-      100% {
-        opacity: 0;
-        transform: scaleX(1);
-      }
-    }
-
-    .cyber-crosshair {
-      position: fixed;
-      pointer-events: none;
-      z-index: 9999;
-      transform: translate(-50%, -50%);
-      animation: cyberCrosshairPulse 0.6s ease-out forwards;
-    }
-
-    .cyber-crosshair::before,
-    .cyber-crosshair::after {
-      content: '';
-      position: absolute;
-      background: currentColor;
-      box-shadow: 0 0 8px currentColor;
-    }
-
-    .cyber-crosshair::before {
-      width: 20px;
-      height: 1px;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    }
-
-    .cyber-crosshair::after {
-      width: 1px;
-      height: 20px;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    }
-
-    @keyframes cyberCrosshairPulse {
-      0% {
-        opacity: 1;
-        width: 30px;
-        height: 30px;
-      }
-
-      50% {
-        opacity: 0.8;
-        width: 40px;
-        height: 40px;
-      }
-
-      100% {
-        opacity: 0;
-        width: 50px;
-        height: 50px;
-      }
+    /* === Cyber Pulse 科幻点击特效 (已精简) === */
+    /* 仅保留 JS 中的 3D 能量弧光 logic */
     }
 
     /* 节点选中发光脉冲 */
@@ -4435,70 +4309,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     function createRippleEffect(position, color) {
       if (PERF_PROFILE.reducedMotion) return;
 
-      // ===== 投影到屏幕坐标 =====
-      const screenPos = position.clone().project(camera);
-      const cx = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-      const cy = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-
-      const colorHex = typeof color === 'number'
-        ? '#' + color.toString(16).padStart(6, '0')
-        : color;
-
-      // ===== 1. 六边形网格展开 =====
-      const hexCount = PERF_PROFILE.lowPower ? 1 : 3;
-      for (let i = 0; i < hexCount; i++) {
-        setTimeout(() => {
-          const hex = document.createElement('div');
-          hex.className = 'cyber-hex-ring';
-          hex.style.left = cx + 'px';
-          hex.style.top = cy + 'px';
-          hex.style.borderColor = colorHex;
-          hex.style.boxShadow = `0 0 15px ${colorHex}40, inset 0 0 10px ${colorHex}30`;
-          document.body.appendChild(hex);
-          hex.addEventListener('animationend', () => hex.remove());
-        }, i * 80);
-      }
-
-      // ===== 2. 数据碎片喷射 =====
-      if (!PERF_PROFILE.lowPower) {
-        const fragments = ['0x3F', 'A7', '∅', '01', 'FF', '>>>', '⟁', '◈', '⬡', 'ERR', 'ACK', '█'];
-        const particleCount = PERF_PROFILE.lowPower ? 3 : 8;
-        for (let i = 0; i < particleCount; i++) {
-          setTimeout(() => {
-            const p = document.createElement('span');
-            p.className = 'cyber-data-particle';
-            p.textContent = fragments[Math.floor(Math.random() * fragments.length)];
-            p.style.left = cx + 'px';
-            p.style.top = cy + 'px';
-            p.style.color = colorHex;
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 40 + Math.random() * 80;
-            p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
-            p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
-            document.body.appendChild(p);
-            p.addEventListener('animationend', () => p.remove());
-          }, Math.random() * 150);
-        }
-      }
-
-      // ===== 3. 精准十字准星 =====
-      const cross = document.createElement('div');
-      cross.className = 'cyber-crosshair';
-      cross.style.left = cx + 'px';
-      cross.style.top = cy + 'px';
-      cross.style.color = colorHex;
-      document.body.appendChild(cross);
-      cross.addEventListener('animationend', () => cross.remove());
-
-      // ===== 4. 水平扫描线 =====
-      const scan = document.createElement('div');
-      scan.className = 'cyber-scan-line';
-      scan.style.top = cy + 'px';
-      scan.style.background = `linear-gradient(90deg, transparent, ${colorHex}80, ${colorHex}, ${colorHex}80, transparent)`;
-      document.body.appendChild(scan);
-      scan.addEventListener('animationend', () => scan.remove());
-
-      // ===== 5. 3D 能量弧光连接邻居 =====
+      // ===== 3D 能量弧光连接邻居 (仅保留此效果) =====
       if (!PERF_PROFILE.lowPower) {
         // 找2个最近的邻居节点
         const distances = nodeMeshes
@@ -4536,7 +4347,7 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
         });
       }
 
-      // ===== 6. 3D 节点冲击波 =====
+      // ===== 3D 节点冲击波 =====
       const targetMesh = nodeMeshes.find(m => m.position.equals(position));
       if (targetMesh) {
         const origScale = targetMesh.scale.x;
