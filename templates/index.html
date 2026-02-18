@@ -564,9 +564,31 @@
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       text-transform: uppercase;
       letter-spacing: 1px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn .btn-ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.35);
+      transform: scale(0);
+      animation: btnRippleAnim 0.5s ease-out forwards;
+      pointer-events: none;
+    }
+
+    @keyframes btnRippleAnim {
+      to {
+        transform: scale(2.5);
+        opacity: 0;
+      }
     }
 
     .btn-primary {
@@ -753,14 +775,36 @@
       bottom: 0;
       background: rgba(0, 5, 10, 0.92);
       z-index: 500;
-      display: none;
+      display: flex;
       align-items: center;
       justify-content: center;
       backdrop-filter: blur(10px);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
     .modal-overlay.show {
-      display: flex;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    .modal-overlay.show .modal {
+      animation: modalIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes modalIn {
+      from {
+        transform: scale(0.92) translateY(20px);
+        opacity: 0;
+      }
+
+      to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+      }
     }
 
     .modal {
@@ -1211,12 +1255,108 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: rgba(0, 40, 80, 0.3);
+      background: rgba(0, 40, 80, 0.2);
+      border-radius: 3px;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: rgba(0, 200, 255, 0.4);
+      background: linear-gradient(180deg, rgba(0, 200, 255, 0.5), rgba(0, 100, 200, 0.4));
       border-radius: 3px;
+      transition: background 0.2s;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, rgba(0, 220, 255, 0.7), rgba(0, 130, 255, 0.6));
+    }
+
+    /* === 2D 屏幕涟漪效果 === */
+    .screen-ripple {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      border: 2px solid;
+      animation: screenRippleAnim 0.6s cubic-bezier(0, 0.5, 0.3, 1) forwards;
+    }
+
+    @keyframes screenRippleAnim {
+      0% {
+        width: 10px;
+        height: 10px;
+        opacity: 0.9;
+      }
+
+      100% {
+        width: 120px;
+        height: 120px;
+        opacity: 0;
+      }
+    }
+
+    /* 节点选中发光脉冲 */
+    @keyframes nodeSelectPulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 20px currentColor;
+      }
+
+      50% {
+        box-shadow: 0 0 40px currentColor, 0 0 60px currentColor;
+      }
+    }
+
+    /* 日志条目滑入动画 */
+    .log-item {
+      animation: logSlideIn 0.3s ease-out;
+    }
+
+    @keyframes logSlideIn {
+      from {
+        transform: translateX(-12px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* 面板 section hover 发光 */
+    .panel-section {
+      transition: border-color 0.3s, box-shadow 0.3s;
+      border-left: 2px solid transparent;
+    }
+
+    .panel-section:hover {
+      border-left-color: rgba(0, 200, 255, 0.3);
+      box-shadow: inset 2px 0 12px rgba(0, 200, 255, 0.05);
+    }
+
+    /* 按钮 loading 状态 */
+    .btn.loading {
+      pointer-events: none;
+      opacity: 0.75;
+    }
+
+    .btn.loading::before {
+      content: '';
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: btnSpin 0.6s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes btnSpin {
+      to {
+        transform: rotate(360deg);
+      }
     }
   </style>
 </head>
@@ -1299,7 +1439,8 @@
     </div>
     <div class="doc-feed-actions">
       <button class="btn btn-secondary" id="docFeedSubmitBtn"
-        style="padding:7px 12px;font-size:10px;border-color:#cc66ff;color:#cc66ff;flex:1;" onclick="submitDocumentFeed()">
+        style="padding:7px 12px;font-size:10px;border-color:#cc66ff;color:#cc66ff;flex:1;"
+        onclick="submitDocumentFeed()">
         📤 上传文档
       </button>
       <button class="btn btn-secondary" style="padding:7px 12px;font-size:10px;flex:1;"
@@ -1440,33 +1581,39 @@
     </div>
 
     <!-- OpenClaw Board Section -->
-    <div class="panel-section" style="background: linear-gradient(135deg, rgba(40,0,60,0.95), rgba(20,0,40,0.95)); border: 1px solid rgba(255,0,255,0.4);">
+    <div class="panel-section"
+      style="background: linear-gradient(135deg, rgba(40,0,60,0.95), rgba(20,0,40,0.95)); border: 1px solid rgba(255,0,255,0.4);">
       <div class="section-title" style="color:#ff66ff;">🕵️ OpenClaw 情报局</div>
-      
+
       <div style="display:flex; gap:8px; margin-bottom:12px;">
-        <div class="stat-box" style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
+        <div class="stat-box"
+          style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
           <div style="font-size:18px; color:#ff66ff;" id="boardIntelCount">0</div>
           <div style="font-size:9px; color:#aa66aa;">情报条目</div>
         </div>
-        <div class="stat-box" style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
-           <div style="font-size:18px; color:#ff66ff;" id="boardPlanCount">0</div>
-           <div style="font-size:9px; color:#aa66aa;">活跃计划</div>
+        <div class="stat-box"
+          style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
+          <div style="font-size:18px; color:#ff66ff;" id="boardPlanCount">0</div>
+          <div style="font-size:9px; color:#aa66aa;">活跃计划</div>
         </div>
       </div>
 
       <div class="btn-group" style="margin-bottom:12px;">
-        <button class="btn btn-primary" id="runPlanningBtn" 
+        <button class="btn btn-primary" id="runPlanningBtn"
           style="padding:8px 12px; font-size:11px; background:linear-gradient(135deg, #cc00cc, #ff00ff); border-color:#ff66ff;">
           🧠 召开红队策划会
         </button>
       </div>
 
       <div style="font-size:10px; color:#ff66ff; margin-bottom:6px;">最新情报 (Intel Feed)</div>
-      <div id="boardIntelFeed" style="max-height:120px; overflow-y:auto; background:rgba(20,0,30,0.8); border:1px solid rgba(255,0,255,0.2); border-radius:6px; padding:8px; font-size:10px; font-family:monospace;">
+      <div id="boardIntelFeed"
+        style="max-height:120px; overflow-y:auto; background:rgba(20,0,30,0.8); border:1px solid rgba(255,0,255,0.2); border-radius:6px; padding:8px; font-size:10px; font-family:monospace;">
         <div style="color:#664466; text-align:center;">暂无情报...</div>
       </div>
-      
-      <button class="btn btn-secondary" style="width:100%; margin-top:8px; font-size:10px; color:#ff66ff; border-color:rgba(255,0,255,0.3);" onclick="refreshBoardData()">
+
+      <button class="btn btn-secondary"
+        style="width:100%; margin-top:8px; font-size:10px; color:#ff66ff; border-color:rgba(255,0,255,0.3);"
+        onclick="refreshBoardData()">
         ↻ 刷新情报板
       </button>
     </div>
@@ -1762,7 +1909,7 @@
     let simulationTimer = null;
     let simulationRunning = false;
     let currentFilter = 'all';
-    
+
     // OpenClaw Board Data
     let boardData = { intel_feed: [], active_plans: {}, stats: {} };
 
@@ -1780,12 +1927,12 @@
     function renderBoardPanel() {
       document.getElementById('boardIntelCount').innerText = boardData.stats.intel_count || 0;
       document.getElementById('boardPlanCount').innerText = boardData.stats.plans_count || 0;
-      
+
       const feedContainer = document.getElementById('boardIntelFeed');
       if (boardData.intel_feed && boardData.intel_feed.length > 0) {
         feedContainer.innerHTML = boardData.intel_feed.map(item => {
-            const time = new Date(item.timestamp * 1000).toLocaleTimeString();
-            return `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,0,255,0.15); padding-bottom:4px;">
+          const time = new Date(item.timestamp * 1000).toLocaleTimeString();
+          return `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,0,255,0.15); padding-bottom:4px;">
               <span style="color:#aa66aa;">[${time}]</span> 
               <span style="color:#ff66ff; font-weight:bold;">${item.agent_id}:</span> 
               <span style="color:#e0d0e0;">${item.content?.substring(0, 50)}...</span>
@@ -1801,7 +1948,7 @@
       const originalText = btn.innerText;
       btn.disabled = true;
       btn.innerText = "🛑 策划中...";
-      
+
       const topic = document.getElementById('testTopic').value || "通用敏感话题";
       addLog(`开始红队策划会议: ${topic}`, 'info');
 
@@ -1812,12 +1959,12 @@
           body: JSON.stringify({ topic: topic })
         });
         const result = await res.json();
-        
+
         addLog(`策划完成! 产生 ${result.proposals_count} 个提案`, 'success');
         if (result.winner) {
-            addLog(`🏆 最佳策略: ${result.winner.strategy_name} (票数: ${result.winner.votes})`, 'success');
-            // Show modal with details
-            showReportModal("红队策划会议结果", `
+          addLog(`🏆 最佳策略: ${result.winner.strategy_name} (票数: ${result.winner.votes})`, 'success');
+          // Show modal with details
+          showReportModal("红队策划会议结果", `
               <h3>🏆 获胜策略: ${result.winner.strategy_name}</h3>
               <p><strong>提出者:</strong> ${result.winner.agent_id}</p>
               <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:6px; margin:10px 0;">
@@ -2446,8 +2593,8 @@
 
       // Bind Planning Button
       const planBtn = document.getElementById('runPlanningBtn');
-      if(planBtn) planBtn.addEventListener('click', runPlanningMeeting);
-      
+      if (planBtn) planBtn.addEventListener('click', runPlanningMeeting);
+
       // Initial Board Load
       setTimeout(refreshBoardData, 1000);
 
@@ -4157,52 +4304,70 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     }
 
     function createRippleEffect(position, color) {
-      if (PERF_PROFILE.reducedMotion) {
-        return;
-      }
-      // 创建流畅的涟漪效果 - 更快的响应
-      const ringCount = PERF_PROFILE.lowPower ? 1 : 2; // 低性能设备减少动画环
+      if (PERF_PROFILE.reducedMotion) return;
 
+      // ===== 2D 屏幕涟漪（精准定位到鼠标点击处）=====
+      // 将3D世界坐标投影到屏幕坐标
+      const screenPos = position.clone().project(camera);
+      const cx = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+      const cy = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+
+      const colorHex = typeof color === 'number'
+        ? '#' + color.toString(16).padStart(6, '0')
+        : color;
+
+      const ringCount = PERF_PROFILE.lowPower ? 1 : 2;
       for (let i = 0; i < ringCount; i++) {
         setTimeout(() => {
-          // 使用更薄的环，更精致
-          const ringGeo = new THREE.RingGeometry(0.5, 1.5, PERF_PROFILE.lowPower ? 18 : 32);
-          const ringMat = new THREE.MeshBasicMaterial({
-            color: color,
-            transparent: true,
-            opacity: 0.9,
-            side: THREE.DoubleSide,
-            blending: THREE.AdditiveBlending
-          });
-          const ring = new THREE.Mesh(ringGeo, ringMat);
-          ring.position.copy(position);
-          ring.lookAt(camera.position);
-          scene.add(ring);
+          const ripple = document.createElement('div');
+          ripple.className = 'screen-ripple';
+          ripple.style.left = cx + 'px';
+          ripple.style.top = cy + 'px';
+          ripple.style.borderColor = colorHex;
+          ripple.style.boxShadow = `0 0 12px ${colorHex}, inset 0 0 8px ${colorHex}`;
+          ripple.style.transform = 'translate(-50%, -50%)';
+          document.body.appendChild(ripple);
+          ripple.addEventListener('animationend', () => ripple.remove());
+        }, i * 100);
+      }
 
-          const startTime = Date.now();
-          const duration = PERF_PROFILE.lowPower ? 420 : 600;
+      // ===== 3D 节点发光脉冲（在场景内给被点击的节点加发光效果）=====
+      // 找到被点击的 mesh 并让它短暂发光加亮
+      const targetMesh = nodeMeshes.find(m => m.position.equals(position));
+      if (targetMesh && targetMesh.material) {
+        const origEmissive = targetMesh.material.emissiveIntensity || 0;
+        const origScale = targetMesh.scale.x;
+        targetMesh.material.emissiveIntensity = 1.5;
+        targetMesh.scale.setScalar(origScale * 1.15);
 
-          const animateRing = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = elapsed / duration;
-
-            if (progress < 1) {
-              // 使用缓动函数，更平滑
-              const easeProgress = 1 - Math.pow(1 - progress, 3);
-              const scale = 1 + easeProgress * 15; // 更小的缩放范围
-              ring.scale.setScalar(scale);
-              ring.material.opacity = 0.9 * (1 - easeProgress);
-              requestAnimationFrame(animateRing);
-            } else {
-              scene.remove(ring);
-              ring.geometry.dispose();
-              ring.material.dispose();
-            }
-          };
-          animateRing();
-        }, i * 80); // 减少间隔到80ms
+        setTimeout(() => {
+          targetMesh.material.emissiveIntensity = origEmissive;
+          targetMesh.scale.setScalar(origScale);
+        }, 350);
       }
     }
+
+    // ===== 按钮涟漪效果 =====
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest('.btn, button[onclick]');
+      if (!btn) return;
+
+      const rect = btn.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height) * 2;
+      const ripple = document.createElement('span');
+      ripple.className = 'btn-ripple';
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+
+      // Ensure the button can contain the ripple
+      if (getComputedStyle(btn).position === 'static') {
+        btn.style.position = 'relative';
+      }
+      btn.style.overflow = 'hidden';
+      btn.appendChild(ripple);
+      ripple.addEventListener('animationend', () => ripple.remove());
+    });
 
     function selectNode(nodeData, mesh) {
       nodeMeshes.forEach(m => {
