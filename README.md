@@ -1,193 +1,221 @@
-# 数字孪生风控风洞（3D Enterprise）
+# 🌀 数字孪生风控风洞 | Digital Twin Risk Wind Tunnel
 
-基于多智能体攻防演练的企业级内容风控系统。  
-当前版本以 `web_app.py + templates/index.html` 为主，不包含 Streamlit 版本。
+> 基于多智能体攻防演练的 3D 可视化内容风控系统
 
-## 1. 当前版本能力
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11+-blue?logo=python" alt="Python" />
+  <img src="https://img.shields.io/badge/Flask-Backend-green?logo=flask" alt="Flask" />
+  <img src="https://img.shields.io/badge/Three.js-3D_Engine-black?logo=threedotjs" alt="Three.js" />
+  <img src="https://img.shields.io/badge/Render-Deployed-purple?logo=render" alt="Render" />
+</p>
 
-- 3D 风洞控制台：可视化 1 个中心质检体 + 多个风险用户画像（默认 26 个）。
-- 攻击能力递进：外部攻击体会学习、协作、变体生成，能力会持续增强。
-- 规则治理：规则快照、变更申请、审批、应用，支持可审计流程。
-- 企业编排：Campaign 基线/对抗阶段、A/B 对比、回归矩阵。
-- 告警与审计：告警通道、事件状态、投递记录、审计日志。
-- 文档投喂学习：左侧文档投喂窗口支持大文件与 PDF，投喂后全体攻击体自动吸收知识。
+---
 
-## 2. 技术栈与结构
+## ✨ 系统概览
 
-- 后端：Flask（`web_app.py`）
-- 前端：Three.js + 原生 JS（`templates/index.html`）
-- 持久化：SQLite（默认 `data/config.db`）
-- 部署：Gunicorn + Render（`Procfile`, `render.yaml`）
+72 个外国攻击 Agent 围攻 1 个中心质检 Agent 的 3D 实时对抗模拟平台。
 
-核心文件：
+**核心能力：**
 
-- `web_app.py`：所有 API 与页面入口
-- `agents.py`：攻击体/中心质检体定义与能力演化
-- `battle.py`：单测、迭代、协作等攻防流程
-- `orchestrator.py`：企业战役编排
-- `rule_engine.py`：规则引擎
-- `attack_knowledge.py`：知识库与投喂吸收
-- `config_store.py`：规则/快照/回归/告警等持久化
-- `templates/index.html`：3D 控制台（含左侧文档投喂窗口）
+- 🎯 **3D 风洞可视化** — Three.js 球体拓扑，实时渲染 72 个攻击节点 + 1 个质检中心
+- ⚔️ **多智能体攻防** — 攻击体自学习、协作、变体生成，能力持续增强
+- 📋 **规则治理** — 快照、变更申请、审批、应用，完整审计流程
+- 🏢 **企业编排** — Campaign 基线/对抗、A/B 对比、回归矩阵
+- 📚 **文档投喂** — PDF/TXT/JSON 上传，全体攻击体自动吸收知识
 
-## 3. 快速启动
+**在线演示：** [digital-twin-risk-demo.onrender.com](https://digital-twin-risk-demo.onrender.com/)
 
-### 3.1 环境要求
+---
 
-- Python 3.11+（建议）
-- 可选模型密钥（Gemini/OpenAI）
+## 🎨 UI 设计
 
-### 3.2 安装依赖
+### 布局架构
+
+```
+┌─────────────────────────────────────────────┐
+│  RISK WIND TUNNEL          72  38  0  0  -- │  ← 顶部状态栏
+├──────────────────────┬──────────────────────┤
+│                      │ ① → ② → ③ Stepper   │  ← 横向步骤指示
+│   [Category 浮层]    │  主题 / 规则 / 测试    │
+│                      │                      │
+│                      │ 🚀 全员对抗测试        │  ← 始终可见主按钮
+│     3D SPHERE        │                      │
+│      (70%)           │ ▸ 测试结果             │  ← 可折叠区
+│                      │ ▸ System Log          │
+│                      │ ▸ Agent 配置           │
+│                      │ ▸ OpenClaw 情报局      │
+│                      │ ▸ 知识投喂              │
+│                      │ ▸ 高级配置              │
+│                      │ ▸ 企业级总控            │
+└──────────────────────┴──────────────────────┘
+```
+
+### 视觉特性
+
+| 特性 | 实现 |
+|------|------|
+| **Glassmorphism** | `backdrop-filter: blur(20px)` 毛玻璃效果 |
+| **横向 Stepper** | 3 步工作流（主题→规则→测试），可点击切换 |
+| **微动效** | 步骤脉冲、内容淡入滑动、按钮涟漪、弹簧过渡 |
+| **字体** | Google Fonts Inter |
+| **色彩** | 统一青蓝色系 `#00d4ff`，去除粉色 |
+| **折叠面板** | 原生 `<details>` + 动画箭头旋转 |
+| **左侧浮层** | 200px 紧凑分类面板，可折叠为图标 |
+
+---
+
+## 🔧 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 后端 | Flask (`web_app.py`) |
+| 前端 | Three.js + 原生 JS (`templates/index.html`) |
+| 字体 | Google Fonts (Inter) |
+| 持久化 | SQLite (`data/config.db`) |
+| 部署 | Gunicorn + Render |
+
+### 核心文件
+
+| 文件 | 职责 |
+|------|------|
+| `web_app.py` | API 入口 + 页面路由 |
+| `agents.py` | 攻击体/质检体定义与能力演化 |
+| `battle.py` | 单测、迭代、协作等攻防流程 |
+| `orchestrator.py` | 企业战役编排 |
+| `rule_engine.py` | 规则引擎 |
+| `attack_knowledge.py` | 知识库与投喂吸收 |
+| `config_store.py` | 规则/快照/回归/告警持久化 |
+| `templates/index.html` | 3D 控制台前端 |
+
+---
+
+## 🚀 快速启动
+
+### 环境要求
+
+- Python 3.11+
+- 可选模型密钥（Gemini / OpenAI / Minimax）
+
+### 安装 & 运行
 
 ```bash
+# 安装依赖
 pip install -r requirements.txt
-```
 
-### 3.3 本地运行
-
-开发模式：
-
-```bash
+# 开发模式
 python web_app.py
-```
 
-生产模式（与 Render 一致）：
-
-```bash
+# 生产模式
 gunicorn web_app:app --bind 0.0.0.0:8000 --workers 2 --threads 4 --timeout 600
 ```
 
-访问：
+访问 `http://127.0.0.1:8000`
 
-- `http://127.0.0.1:8000`
+### 环境变量
 
-## 4. 关键环境变量
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `AI_PROVIDER` | `gemini` / `openai` / `minimax` | — |
+| `GEMINI_API_KEY` | Gemini API Key | — |
+| `OPENAI_API_KEY` | OpenAI API Key | — |
+| `MINIMAX_API_KEY` | Minimax API Key | — |
+| `RISK_CONFIG_DB_PATH` | SQLite 路径 | `data/config.db` |
+| `KNOWLEDGE_CONTEXT_BUDGET` | 知识注入上下文预算 | `6000` |
+| `MAX_DOC_UPLOAD_MB` | 文档上传上限 | `1024` |
 
-- `AI_PROVIDER`：`gemini` / `openai`
-- `GEMINI_API_KEY`：Gemini Key
-- `OPENAI_API_KEY`：OpenAI Key
-- `RISK_CONFIG_DB_PATH`：SQLite 路径（默认 `data/config.db`）
-- `KNOWLEDGE_CONTEXT_BUDGET`：知识注入上下文预算（默认 6000）
-- `MAX_DOC_UPLOAD_MB`：文档上传上限（默认 1024MB，最低 64MB）
+---
 
-## 5. 文档投喂（最新）
+## 📡 API 清单
 
-### 5.1 前端入口
+<details>
+<summary><b>规则与治理</b></summary>
 
-- 左侧 `Document Feed` 面板（`templates/index.html`）
-- 支持类型：`materials` / `slang` / `cases`
-- 支持文件：`.txt .md .markdown .csv .json .jsonl .pdf`
-- 支持上传进度、批次大小、来源和标签
+- `POST /rules` — 设定规则
+- `GET /rules` — 查看规则
+- `POST /rules/snapshots` — 创建快照
+- `GET /rules/snapshots` — 查看快照
+- `POST /rules/snapshots/<id>/apply` — 应用快照
+- `POST /rules/change-requests` — 变更申请
+- `GET /rules/change-requests` — 查看变更
+- `POST /rules/change-requests/<id>/review` — 审批
+- `POST /rules/change-requests/<id>/apply` — 应用变更
 
-### 5.2 后端接口
+</details>
 
-- `POST /knowledge/feed/document`（`multipart/form-data`）
+<details>
+<summary><b>攻防与 Agent</b></summary>
 
-表单字段：
+- `POST /battle/run` — 运行对抗
+- `POST /battle/iterate` — 迭代攻击
+- `POST /battle/collaborate` — 协作攻击
+- `GET /battle/history` — 对抗历史
+- `GET /agent/<id>/state` — Agent 状态
+- `GET /agent/<id>/techniques/unlocked` — 已解锁技能
+- `POST /agent/<id>/config` — 配置 Agent
+- `GET /agents/progression` — 能力演进
+- `GET /agents/states` — 全部状态
 
-- `file`：必填，上传文件
-- `type`：`materials|slang|cases`
-- `category`：分类（可选）
-- `source`：来源（可选）
-- `tags`：标签（可选，逗号分隔）
-- `batch_size`：每批写入条数（10~1000）
+</details>
 
-说明：
+<details>
+<summary><b>知识库</b></summary>
 
-- 文件超限时返回 `413`。
-- PDF 解析依赖 `pypdf`。
-- 投喂完成后会触发全体攻击体知识吸收与能力增长。
+- `POST /knowledge/feed` — 直接投喂
+- `POST /knowledge/feed/document` — 文档投喂 (multipart)
+- `GET /knowledge/list` — 知识列表
+- `POST /knowledge/clear` — 清空知识
 
-## 6. 企业运行流程（推荐）
+</details>
 
-1. 设定规则：`POST /rules`
-2. 规则治理：快照、变更申请、审批、应用
-3. 投喂文档：`POST /knowledge/feed/document`
-4. 运行战役：`POST /campaigns/run`
-5. 回放与对比：`GET /campaigns/<id>/replay`, `POST /campaigns/compare`, `POST /campaigns/ab-run`
-6. 回归矩阵：`POST /regressions/run`
-7. 告警和审计：`/alerts/*`, `/audit/logs`
+<details>
+<summary><b>企业编排与回归</b></summary>
 
-## 7. API 分组清单
+- `POST /campaigns/run` — 运行战役
+- `GET /campaigns` — 战役列表
+- `GET /campaigns/<id>` — 战役详情
+- `GET /campaigns/<id>/replay` — 回放
+- `POST /campaigns/compare` — 对比
+- `POST /campaigns/ab-run` — A/B 测试
+- `POST /regressions/run` — 回归测试
+- `GET /regressions/reports` — 回归报告
+- `GET /regressions/reports/<id>/markdown` — Markdown 报告
+- `POST /regressions/reports/<id>/dispatch-alerts` — 告警分发
 
-规则与治理：
+</details>
 
-- `POST /rules`
-- `GET /rules`
-- `POST /rules/snapshots`
-- `GET /rules/snapshots`
-- `POST /rules/snapshots/<snapshot_id>/apply`
-- `POST /rules/change-requests`
-- `GET /rules/change-requests`
-- `GET /rules/change-requests/<request_id>`
-- `POST /rules/change-requests/<request_id>/review`
-- `POST /rules/change-requests/<request_id>/apply`
+<details>
+<summary><b>告警与审计</b></summary>
 
-攻防与Agent：
+- `GET /alerts/channels` — 告警通道
+- `POST /alerts/channels` — 创建通道
+- `POST /alerts/channels/<id>/toggle` — 开关通道
+- `GET /alerts/incidents` — 事件列表
+- `POST /alerts/incidents/<id>/ack` — 确认事件
+- `GET /alerts/deliveries` — 投递记录
+- `GET /audit/logs` — 审计日志
 
-- `POST /battle/run`
-- `POST /battle/iterate`
-- `POST /battle/collaborate`
-- `GET /battle/history`
-- `GET /agent/<persona_id>/state`
-- `GET /agent/<persona_id>/techniques/unlocked`
-- `POST /agent/<persona_id>/config`
-- `GET /agents/progression`
-- `GET /agents/states`
+</details>
 
-知识库：
+<details>
+<summary><b>系统</b></summary>
 
-- `POST /knowledge/feed`
-- `POST /knowledge/feed/document`
-- `GET /knowledge/list`
-- `POST /knowledge/clear`
+- `GET /health` — 健康检查
+- `GET /events` — SSE 事件流
+- `POST /system/reset` — 系统重置
 
-企业编排与回归：
+</details>
 
-- `POST /campaigns/run`
-- `GET /campaigns`
-- `GET /campaigns/<campaign_id>`
-- `GET /campaigns/<campaign_id>/replay`
-- `POST /campaigns/compare`
-- `POST /campaigns/ab-run`
-- `POST /regressions/run`
-- `GET /regressions/reports`
-- `GET /regressions/reports/<report_id>`
-- `GET /regressions/reports/<report_id>/markdown`
-- `POST /regressions/reports/<report_id>/dispatch-alerts`
+---
 
-告警与审计：
+## 🏗️ 部署（Render）
 
-- `GET /alerts/channels`
-- `POST /alerts/channels`
-- `POST /alerts/channels/<channel_id>/toggle`
-- `GET /alerts/incidents`
-- `POST /alerts/incidents/<incident_id>/ack`
-- `GET /alerts/deliveries`
-- `GET /audit/logs`
+仓库已含 `render.yaml` + `Procfile`，push 到 `main` 自动部署。
 
-系统与健康：
+手动部署：Render 控制台 → `digital-twin-risk-demo` → Manual Deploy → `main`
 
-- `GET /health`
-- `GET /events`
-- `POST /system/reset`
+---
 
-## 8. 部署说明（Render）
-
-仓库已包含：
-
-- `render.yaml`
-- `Procfile`
-- Gunicorn 超时 `600s`
-- `MAX_DOC_UPLOAD_MB=1024` 默认配置
-
-如果线上仍显示旧版本，直接在 Render 控制台执行：
-
-1. 打开服务 `digital-twin-risk-demo`
-2. 选择 `Manual Deploy`
-3. 部署 `main` 分支最新 commit
-
-## 9. 夜间回归脚本
+## 🌙 夜间回归
 
 ```bash
 python nightly_regression.py \
