@@ -6,6 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="3D数字孪生风控风洞：多智能体攻防模拟、规则回归与风险可视化控制台" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <title>数字孪生风控风洞 | Digital Twin Risk Wind Tunnel v2</title>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
@@ -22,7 +25,7 @@
     }
 
     body {
-      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
       background: #00050a;
       color: #e0f8ff;
       min-height: 100vh;
@@ -93,6 +96,68 @@
       100% {
         background-position: 200% 0;
       }
+    }
+
+    @keyframes stepPulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 16px rgba(0, 212, 255, 0.5);
+      }
+
+      50% {
+        box-shadow: 0 0 28px rgba(0, 212, 255, 0.7), 0 0 6px rgba(0, 212, 255, 0.3);
+      }
+    }
+
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes skeletonShimmer {
+      0% {
+        background-position: -200% 0;
+      }
+
+      100% {
+        background-position: 200% 0;
+      }
+    }
+
+    /* Skeleton loading placeholder */
+    .skeleton {
+      background: linear-gradient(90deg, rgba(0, 40, 60, 0.4) 25%, rgba(0, 100, 150, 0.2) 50%, rgba(0, 40, 60, 0.4) 75%);
+      background-size: 200% 100%;
+      animation: skeletonShimmer 1.5s ease-in-out infinite;
+      border-radius: 6px;
+      color: transparent !important;
+    }
+
+    /* Filter panel collapse animation */
+    .filter-panel.collapsed {
+      width: 44px !important;
+      padding: 8px !important;
+      overflow: hidden;
+    }
+
+    .filter-panel.collapsed .filter-content,
+    .filter-panel.collapsed .section-title {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .filter-panel {
+      transition: width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+        padding 0.3s ease,
+        opacity 0.2s ease;
     }
 
     .subtitle {
@@ -430,7 +495,11 @@
       align-items: center;
       gap: 4px;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .ws-step:hover {
+      transform: scale(1.08);
     }
 
     .ws-dot {
@@ -453,6 +522,7 @@
       border-color: #00d4ff;
       color: #fff;
       box-shadow: 0 0 16px rgba(0, 212, 255, 0.5);
+      animation: stepPulse 2s ease-in-out infinite;
     }
 
     .ws-step.done .ws-dot {
@@ -493,10 +563,13 @@
     /* Step 内容切换 */
     .step-content {
       display: none;
+      opacity: 0;
+      transform: translateY(8px);
     }
 
     .step-content.active {
       display: block;
+      animation: fadeSlideIn 0.35s ease forwards;
     }
 
     /* 可折叠面板 */
@@ -515,26 +588,34 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      transition: color 0.2s;
+      transition: color 0.25s, background 0.25s, padding-left 0.25s;
     }
 
     .panel-collapse summary:hover {
       color: #00d4ff;
+      background: rgba(0, 200, 255, 0.04);
+      padding-left: 20px;
     }
 
     .panel-collapse summary::after {
       content: '▸';
       margin-left: auto;
       font-size: 11px;
-      transition: transform 0.2s;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     .panel-collapse[open] summary::after {
       transform: rotate(90deg);
     }
 
+    .panel-collapse[open] summary {
+      color: #00d4ff;
+      border-bottom: 1px solid rgba(0, 200, 255, 0.06);
+    }
+
     .panel-collapse .collapse-body {
       padding: 0 16px 14px;
+      animation: fadeSlideIn 0.3s ease;
     }
 
     /* 主按钮发光效果 */
@@ -549,13 +630,38 @@
       border-radius: 12px;
       cursor: pointer;
       box-shadow: 0 0 24px rgba(0, 255, 136, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
-      transition: all 0.3s ease;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       letter-spacing: 1px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-glow::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.4s ease, height 0.4s ease;
+    }
+
+    .btn-glow:hover::after {
+      width: 300px;
+      height: 300px;
     }
 
     .btn-glow:hover {
       box-shadow: 0 0 40px rgba(0, 255, 136, 0.5), 0 6px 20px rgba(0, 0, 0, 0.4);
-      transform: translateY(-1px);
+      transform: translateY(-2px) scale(1.01);
+    }
+
+    .btn-glow:active {
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 0 16px rgba(0, 255, 136, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
     }
 
     .btn-glow:disabled {
