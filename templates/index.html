@@ -6242,6 +6242,29 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       safeInit();
     }
   </script>
+  <script>
+    // UI restructuring: global functions for inline onclick handlers
+    function switchWorkflowStep(stepNum) {
+      document.querySelectorAll('.ws-step').forEach(s => {
+        const sn = parseInt(s.dataset.step);
+        s.classList.remove('active', 'done');
+        if (sn === stepNum) s.classList.add('active');
+        else if (sn < stepNum) s.classList.add('done');
+      });
+      const line1 = document.getElementById('wsLine1');
+      const line2 = document.getElementById('wsLine2');
+      if (line1) line1.classList.toggle('done', stepNum > 1);
+      if (line2) line2.classList.toggle('done', stepNum > 2);
+      document.querySelectorAll('.step-content').forEach(c => c.classList.remove('active'));
+      const target = document.getElementById('stepContent' + stepNum);
+      if (target) target.classList.add('active');
+    }
+
+    function toggleFilterPanel() {
+      const panel = document.getElementById('filterPanel');
+      if (panel) panel.classList.toggle('collapsed');
+    }
+  </script>
 </body>
 
 </html>
