@@ -155,21 +155,63 @@
       margin-top: 4px;
     }
 
-    /* 左侧筛选面板 */
+    /* 左侧筛选面板 — 浮动覆盖层 */
     .filter-panel {
       position: fixed;
       top: calc(var(--top-bar-height) + 14px);
       left: 12px;
-      width: 280px;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
+      width: 200px;
+      background: rgba(10, 22, 40, 0.85);
+      border: 1px solid rgba(0, 212, 255, 0.15);
       border-radius: 12px;
-      padding: 14px;
+      padding: 12px 14px;
       z-index: 100;
-      max-height: 240px;
+      max-height: 300px;
       overflow-y: auto;
-      backdrop-filter: blur(20px);
-      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(0, 200, 255, 0.1);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease;
+    }
+
+    .filter-panel.collapsed {
+      width: 44px;
+      padding: 10px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .filter-panel.collapsed .filter-title,
+    .filter-panel.collapsed #filterList {
+      display: none;
+    }
+
+    .filter-toggle {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 24px;
+      height: 24px;
+      background: rgba(0, 200, 255, 0.15);
+      border: 1px solid rgba(0, 200, 255, 0.3);
+      border-radius: 6px;
+      color: #00d4ff;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .filter-toggle:hover {
+      background: rgba(0, 200, 255, 0.25);
+    }
+
+    .filter-panel.collapsed .filter-toggle {
+      position: static;
+      width: 24px;
+      height: 24px;
     }
 
     .filter-title {
@@ -232,19 +274,20 @@
     }
 
     .doc-feed-panel {
+      display: none;
       position: fixed;
       top: calc(var(--top-bar-height) + 266px);
       left: 12px;
       width: 280px;
       max-height: calc(100vh - var(--top-bar-height) - 282px);
       overflow-y: auto;
-      background: var(--panel-bg);
-      border: 1px solid rgba(204, 102, 255, 0.4);
+      background: rgba(10, 22, 40, 0.9);
+      border: 1px solid rgba(0, 212, 255, 0.15);
       border-radius: 12px;
       padding: 14px;
       z-index: 100;
-      backdrop-filter: blur(20px);
-      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(204, 102, 255, 0.15);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
 
     .doc-feed-grid {
@@ -341,20 +384,201 @@
       line-height: 1.45;
     }
 
-    /* 右侧控制面板 */
+    /* 右侧控制面板 — Glassmorphism */
     .control-panel {
       position: fixed;
       top: calc(var(--top-bar-height) + 14px);
       right: 12px;
-      width: 320px;
+      width: 340px;
       max-height: calc(100vh - 80px);
       overflow-y: auto;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      border-radius: 12px;
+      background: rgba(10, 22, 40, 0.75);
+      border: 1px solid rgba(0, 212, 255, 0.12);
+      border-radius: 16px;
       z-index: 100;
       backdrop-filter: blur(20px);
-      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(0, 200, 255, 0.1);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .control-panel::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .control-panel::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .control-panel::-webkit-scrollbar-thumb {
+      background: rgba(0, 200, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    /* 横向步骤指示器 */
+    .workflow-stepper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 16px;
+      padding: 0 8px;
+    }
+
+    .ws-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .ws-dot {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      background: rgba(0, 40, 60, 0.8);
+      border: 2px solid rgba(0, 212, 255, 0.2);
+      color: #4a8aaa;
+      transition: all 0.3s ease;
+    }
+
+    .ws-step.active .ws-dot {
+      background: linear-gradient(135deg, #00aaff, #00d4ff);
+      border-color: #00d4ff;
+      color: #fff;
+      box-shadow: 0 0 16px rgba(0, 212, 255, 0.5);
+    }
+
+    .ws-step.done .ws-dot {
+      background: linear-gradient(135deg, #00aa66, #00ff88);
+      border-color: #00ff88;
+      color: #fff;
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.4);
+    }
+
+    .ws-label {
+      font-size: 9px;
+      color: #4a8aaa;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .ws-step.active .ws-label {
+      color: #00d4ff;
+    }
+
+    .ws-step.done .ws-label {
+      color: #00ff88;
+    }
+
+    .ws-line {
+      width: 36px;
+      height: 2px;
+      background: rgba(0, 212, 255, 0.15);
+      margin: 0 6px;
+      margin-bottom: 18px;
+      transition: background 0.3s;
+    }
+
+    .ws-line.done {
+      background: rgba(0, 255, 136, 0.4);
+    }
+
+    /* Step 内容切换 */
+    .step-content {
+      display: none;
+    }
+
+    .step-content.active {
+      display: block;
+    }
+
+    /* 可折叠面板 */
+    .panel-collapse {
+      border-top: 1px solid rgba(0, 200, 255, 0.08);
+    }
+
+    .panel-collapse summary {
+      padding: 12px 16px;
+      font-size: 10px;
+      color: #4a8aaa;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: color 0.2s;
+    }
+
+    .panel-collapse summary:hover {
+      color: #00d4ff;
+    }
+
+    .panel-collapse summary::after {
+      content: '▸';
+      margin-left: auto;
+      font-size: 11px;
+      transition: transform 0.2s;
+    }
+
+    .panel-collapse[open] summary::after {
+      transform: rotate(90deg);
+    }
+
+    .panel-collapse .collapse-body {
+      padding: 0 16px 14px;
+    }
+
+    /* 主按钮发光效果 */
+    .btn-glow {
+      width: 100%;
+      padding: 14px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, #00aa66, #00ff88);
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 0 24px rgba(0, 255, 136, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+      letter-spacing: 1px;
+    }
+
+    .btn-glow:hover {
+      box-shadow: 0 0 40px rgba(0, 255, 136, 0.5), 0 6px 20px rgba(0, 0, 0, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-glow:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-outline {
+      padding: 8px 14px;
+      font-size: 11px;
+      color: #00d4ff;
+      background: transparent;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-outline:hover {
+      background: rgba(0, 212, 255, 0.1);
+      border-color: rgba(0, 212, 255, 0.5);
     }
 
     .panel-section {
@@ -1382,8 +1606,9 @@
   </div>
   <button id="mobilePanelToggle" class="mobile-panel-toggle" type="button">控制台</button>
 
-  <!-- 左侧筛选 -->
-  <div class="filter-panel">
+  <!-- 左侧筛选 — 浮动覆盖层 -->
+  <div class="filter-panel" id="filterPanel">
+    <button class="filter-toggle" onclick="toggleFilterPanel()" title="收起/展开">◆</button>
     <div class="filter-title">User Categories</div>
     <div id="filterList"></div>
   </div>
@@ -1441,271 +1666,73 @@
     </div>
   </div>
 
-  <!-- 右侧控制面板 -->
+  <!-- 右侧控制面板 — 重构 -->
   <div class="control-panel">
-    <div class="panel-section">
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>📋 角色配置 / Agent Config</span>
-        <button class="btn btn-secondary" id="editAgentBtn" style="padding:4px 8px;font-size:9px;display:none;">✏️
-          编辑</button>
-      </div>
-
-      <!-- 查看模式 -->
-      <div class="node-info" id="nodeInfoView">
-        <div class="node-name" id="nodeName">点击节点选择</div>
-        <div class="node-category" id="nodeCategory">-</div>
-        <div class="node-desc" id="nodeDesc">在3D球体中点击任意节点查看和编辑角色配置</div>
-
-        <div id="agentStats" style="margin-top:12px;display:none;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;color:#4a8aaa;">
-            <div>🎯 技巧: <span id="statTechniques" style="color:#00d4ff;">-</span></div>
-            <div>🌐 影响: <span id="statInfluence" style="color:#00d4ff;">-</span></div>
-            <div>🔒 隐蔽: <span id="statStealth" style="color:#00d4ff;">-</span></div>
-            <div>⭐ 可信: <span id="statCredibility" style="color:#00d4ff;">-</span></div>
-          </div>
-        </div>
-
-        <div class="node-relations" id="nodeRelations" style="max-height:60px;font-size:10px;"></div>
-        <div class="node-memory" id="nodeMemory" style="max-height:50px;font-size:10px;"></div>
-      </div>
-
-      <!-- 编辑模式 -->
-      <div id="nodeInfoEdit" style="display:none;max-height:calc(100vh - 200px);overflow-y:auto;">
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">角色名称</label>
-          <input type="text" id="editName"
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">角色类别</label>
-          <select id="editCategory"
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
-            <option value="文字变形专家">文字变形专家</option>
-            <option value="隐喻暗示专家">隐喻暗示专家</option>
-            <option value="多语言专家">多语言专家</option>
-            <option value="方言俚语专家">方言俚语专家</option>
-            <option value="语境包装专家">语境包装专家</option>
-            <option value="格式利用专家">格式利用专家</option>
-            <option value="综合高手">综合高手</option>
-          </select>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div class="form-group">
-            <label style="font-size:10px;">技能等级 (1-5)</label>
-            <input type="number" id="editSkillLevel" min="1" max="5" step="1"
-              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
-          </div>
-          <div class="form-group">
-            <label style="font-size:10px;">隐蔽性 (0-1)</label>
-            <input type="number" id="editStealth" min="0" max="1" step="0.05"
-              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">掌握技巧 (逗号分隔)</label>
-          <input type="text" id="editTechniques" placeholder="技巧1,技巧2,技巧3"
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">角色描述</label>
-          <textarea id="editDesc" rows="2"
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-        </div>
-
-        <!-- 新增：详细Prompt系统字段 -->
-        <div style="border-top:1px solid rgba(0,200,255,0.2);margin:12px 0 8px;padding-top:10px;">
-          <div style="font-size:10px;color:#00d4ff;margin-bottom:8px;letter-spacing:1px;">📋 详细Prompt系统</div>
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">🎭 角色背景</label>
-          <textarea id="editBackground" rows="3" placeholder="角色的背景故事和人设..."
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">💪 核心能力</label>
-          <textarea id="editCoreAbility" rows="2" placeholder="角色的核心专长和能力..."
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">⚔️ 攻击策略 (每行一条)</label>
-          <textarea id="editAttackStrategy" rows="5" placeholder="1. 策略一...&#10;2. 策略二...&#10;3. 策略三..."
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">🔄 变体生成指令</label>
-          <textarea id="editVariantInstructions" rows="3" placeholder="生成绕过内容的步骤说明..."
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">🧠 思考链 (Chain of Thought)</label>
-          <input type="text" id="editChainOfThought" placeholder="步骤1→步骤2→步骤3→..."
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px;">
-          <label style="font-size:10px;">📝 输出要求</label>
-          <textarea id="editOutputRequirements" rows="2" placeholder="对生成内容的质量要求..."
-            style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-        </div>
-
-        <div class="btn-group" style="margin-top:12px;">
-          <button class="btn btn-primary" id="saveAgentBtn" style="padding:8px 12px;font-size:11px;">💾 保存配置</button>
-          <button class="btn btn-secondary" id="cancelEditBtn" style="padding:8px 12px;font-size:11px;">取消</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- OpenClaw Board Section -->
-    <div class="panel-section"
-      style="background: linear-gradient(135deg, rgba(40,0,60,0.95), rgba(20,0,40,0.95)); border: 1px solid rgba(255,0,255,0.4);">
-      <div class="section-title" style="color:#ff66ff;">🕵️ OpenClaw 情报局</div>
-
-      <div style="display:flex; gap:8px; margin-bottom:12px;">
-        <div class="stat-box"
-          style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
-          <div style="font-size:18px; color:#ff66ff;" id="boardIntelCount">0</div>
-          <div style="font-size:9px; color:#aa66aa;">情报条目</div>
-        </div>
-        <div class="stat-box"
-          style="flex:1; background:rgba(40,0,60,0.6); border:1px solid rgba(255,0,255,0.2); padding:8px; border-radius:6px; text-align:center;">
-          <div style="font-size:18px; color:#ff66ff;" id="boardPlanCount">0</div>
-          <div style="font-size:9px; color:#aa66aa;">活跃计划</div>
-        </div>
-      </div>
-
-      <div class="btn-group" style="margin-bottom:12px;">
-        <button class="btn btn-primary" id="runPlanningBtn"
-          style="padding:8px 12px; font-size:11px; background:linear-gradient(135deg, #cc00cc, #ff00ff); border-color:#ff66ff;">
-          🧠 召开红队策划会
-        </button>
-      </div>
-
-      <div style="font-size:10px; color:#ff66ff; margin-bottom:6px;">最新情报 (Intel Feed)</div>
-      <div id="boardIntelFeed"
-        style="max-height:120px; overflow-y:auto; background:rgba(20,0,30,0.8); border:1px solid rgba(255,0,255,0.2); border-radius:6px; padding:8px; font-size:10px; font-family:monospace;">
-        <div style="color:#664466; text-align:center;">暂无情报...</div>
-      </div>
-
-      <button class="btn btn-secondary"
-        style="width:100%; margin-top:8px; font-size:10px; color:#ff66ff; border-color:rgba(255,0,255,0.3);"
-        onclick="refreshBoardData()">
-        ↻ 刷新情报板
-      </button>
-    </div>
-
-    <!-- 新的测试流程面板 -->
-    <div class="panel-section"
-      style="background: linear-gradient(135deg, rgba(0,40,60,0.95), rgba(0,20,40,0.95)); border: 1px solid rgba(0,200,255,0.4);">
+    <!-- ★ 核心: 对抗工作流 (始终在顶部) -->
+    <div class="panel-section" style="border-bottom:none;">
       <div class="section-title" style="color:#00ffaa;">🎯 对抗测试流程</div>
 
-      <!-- 步骤1: 输入主题 -->
-      <div
-        style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #00d4ff;">
-        <div style="font-size:11px; color:#00d4ff; margin-bottom:6px; font-weight:600;">
-          STEP 1️⃣ 设定测试主题
+      <!-- 横向 Stepper -->
+      <div class="workflow-stepper">
+        <div class="ws-step active" data-step="1" onclick="switchWorkflowStep(1)">
+          <div class="ws-dot">1</div>
+          <div class="ws-label">主题</div>
         </div>
-        <input type="text" id="testTopic" placeholder="输入主题，如：虚假广告、医疗养生、网络赌博、诈骗话术..."
-          style="width:100%;background:rgba(0,20,40,0.9);border:1px solid rgba(0,200,255,0.4);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:12px;">
-        <div style="font-size:9px; color:#5a8aaa; margin-top:4px;">
-          💡 外围攻击Agent将围绕此主题创作内容，但<b style="color:#00d4ff;">不知道</b>中心Agent持有什么规则
+        <div class="ws-line" id="wsLine1"></div>
+        <div class="ws-step" data-step="2" onclick="switchWorkflowStep(2)">
+          <div class="ws-dot">2</div>
+          <div class="ws-label">规则</div>
+        </div>
+        <div class="ws-line" id="wsLine2"></div>
+        <div class="ws-step" data-step="3" onclick="switchWorkflowStep(3)">
+          <div class="ws-dot">3</div>
+          <div class="ws-label">测试</div>
         </div>
       </div>
 
-      <!-- 步骤2: 配置规则 -->
-      <div
-        style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #ffaa00;">
-        <div style="font-size:11px; color:#ffaa00; margin-bottom:6px; font-weight:600;">
-          STEP 2️⃣ 中心Agent审核规则 <span style="color:#ff6b6b;">(仅中心Agent可见)</span>
+      <!-- Step 1: 主题 -->
+      <div class="step-content active" id="stepContent1">
+        <input type="text" id="testTopic" placeholder="输入主题，如：虚假广告、医疗养生、网络赌博、诈骗话术..."
+          style="width:100%;background:rgba(0,20,40,0.9);border:1px solid rgba(0,200,255,0.3);border-radius:8px;padding:10px 12px;color:#e0f8ff;font-size:12px;">
+        <div style="font-size:9px; color:#5a8aaa; margin-top:6px;">
+          💡 外围攻击Agent围绕此主题创作，但<b style="color:#00d4ff;">不知道</b>中心Agent的规则
         </div>
-        <div style="font-size:9px; color:#5a8aaa; margin-bottom:4px;">
+      </div>
+
+      <!-- Step 2: 规则 -->
+      <div class="step-content" id="stepContent2">
+        <div style="font-size:9px; color:#5a8aaa; margin-bottom:6px;">
           🛡️ 中心质检Agent依据这些规则判断外围帖子是否违规
         </div>
         <textarea id="rulesText" placeholder="每行一条规则，例如：&#10;禁止推荐未经批准的药物&#10;禁止虚构医疗数据&#10;禁止冒充医护人员发布内容"
-          style="width:100%;min-height:60px;background:rgba(0,20,40,0.9);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-        <div class="btn-group" style="margin-top:6px;">
-          <button class="btn btn-secondary" id="applyRulesBtn"
-            style="padding:6px 12px;font-size:10px;border-color:#ffaa00;color:#ffaa00;transition:all 0.3s;">
-            🔒 应用规则到中心Agent
-          </button>
-        </div>
+          style="width:100%;min-height:70px;background:rgba(0,20,40,0.9);border:1px solid rgba(255,170,0,0.3);border-radius:8px;padding:10px 12px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        <button class="btn-outline" id="applyRulesBtn"
+          style="margin-top:8px;width:100%;border-color:#ffaa00;color:#ffaa00;transition:all 0.3s;">
+          🔒 应用规则到中心Agent
+        </button>
         <div id="rulesStatus" style="font-size:10px;color:#5a8aaa;margin-top:4px;">未加载规则</div>
       </div>
 
-      <!-- 知识投喂面板 -->
-      <div
-        style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #cc66ff;">
-        <div
-          style="font-size:11px; color:#cc66ff; margin-bottom:6px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:space-between;"
-          onclick="document.getElementById('feedPanel').style.display = document.getElementById('feedPanel').style.display === 'none' ? 'block' : 'none';">
-          <span>📚 知识投喂 / Knowledge Feed</span>
-          <span style="font-size:9px;color:#8a6aaa;">▼ 展开</span>
+      <!-- Step 3: 启动 -->
+      <div class="step-content" id="stepContent3">
+        <div style="font-size:9px; color:#5a8aaa; margin-bottom:10px;">
+          流程：外围Agent发帖 → 中心Agent检测 → 统计绕过率 → 迭代优化
         </div>
-        <div id="feedPanel" style="display:none;">
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <button class="btn btn-secondary" style="padding:4px 8px;font-size:9px;flex:1;"
-              onclick="switchFeedTab('materials')" id="feedTabMaterials">📄 文本样本</button>
-            <button class="btn btn-secondary" style="padding:4px 8px;font-size:9px;flex:1;"
-              onclick="switchFeedTab('slang')" id="feedTabSlang">🗣️ 黑话</button>
-            <button class="btn btn-secondary" style="padding:4px 8px;font-size:9px;flex:1;"
-              onclick="switchFeedTab('cases')" id="feedTabCases">🎯 案例</button>
-          </div>
-          <textarea id="feedContent" placeholder="每行一条，例如：&#10;瓶子今天又讲话了&#10;赵家人割韭菜&#10;&#10;黑话格式：翠=两个习字"
-            style="width:100%;min-height:50px;background:rgba(0,20,40,0.9);border:1px solid rgba(200,100,255,0.4);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
-          <div class="btn-group" style="margin-top:6px;">
-            <button class="btn btn-secondary" id="feedSubmitBtn"
-              style="padding:6px 12px;font-size:10px;border-color:#cc66ff;color:#cc66ff;"
-              onclick="submitFeedKnowledge()">
-              📥 投喂
-            </button>
-            <button class="btn btn-secondary" style="padding:6px 12px;font-size:10px;" onclick="clearFeedKnowledge()">
-              🗑️ 清空
-            </button>
-          </div>
-          <div id="feedStatus" style="font-size:9px;color:#5a8aaa;margin-top:4px;">暂无投喂资料</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button class="btn-outline" id="runSingleTestBtn" style="flex:1;">🎲 单Agent</button>
+          <button class="btn-outline" id="runIterateBtn" style="flex:1;">🔄 迭代学习</button>
+          <button class="btn-outline" id="runCollaborateBtn" style="flex:1;">🤝 协作</button>
         </div>
       </div>
 
-      <!-- 步骤3: 启动测试 -->
-      <div
-        style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #00ff88;">
-        <div style="font-size:11px; color:#00ff88; margin-bottom:6px; font-weight:600;">
-          STEP 3️⃣ 启动对抗测试
-        </div>
-        <div style="font-size:9px; color:#5a8aaa; margin-bottom:8px;">
-          流程：外围Agent发帖 → 中心Agent检测 → 统计绕过率 → 迭代优化
-        </div>
-        <div class="btn-group">
-          <button class="btn btn-primary" id="runSingleTestBtn"
-            style="padding:8px 14px;font-size:11px;background:linear-gradient(135deg, #0066aa, #00aaff);">
-            🎲 单Agent测试
-          </button>
-          <button class="btn btn-primary" id="runBatchTestBtn"
-            style="padding:8px 14px;font-size:11px;background:linear-gradient(135deg, #00aa66, #00ff88);">
-            🚀 全员对抗
-          </button>
-        </div>
-        <div class="btn-group" style="margin-top:6px;">
-          <button class="btn btn-secondary" id="runIterateBtn" style="padding:6px 12px;font-size:10px;">
-            🔄 迭代学习
-          </button>
-          <button class="btn btn-secondary" id="runCollaborateBtn" style="padding:6px 12px;font-size:10px;">
-            🤝 协作攻击
-          </button>
-        </div>
-      </div>
+      <!-- 全员对抗 — 始终可见的核心按钮 -->
+      <button class="btn-glow" id="runBatchTestBtn" style="margin-top:12px;">
+        🚀 全员对抗测试
+      </button>
 
       <!-- 测试进度 -->
       <div id="testProgress"
-        style="display:none; padding:8px; background:rgba(0,50,30,0.5); border-radius:6px; border:1px solid rgba(0,255,136,0.3);">
+        style="display:none; margin-top:10px; padding:8px; background:rgba(0,50,30,0.5); border-radius:8px; border:1px solid rgba(0,255,136,0.2);">
         <div style="font-size:10px; color:#00ff88; margin-bottom:4px;">⏳ 测试进行中...</div>
         <div id="testProgressBar"
           style="height:4px; background:rgba(0,100,50,0.5); border-radius:2px; overflow:hidden;">
@@ -1717,88 +1744,7 @@
       </div>
     </div>
 
-    <div class="panel-section">
-      <div class="section-title">⚙️ 高级配置</div>
-      <div class="form-group">
-        <label>社区规模 / 变体数量</label>
-        <select id="variantCount">
-          <option value="2">2x</option>
-          <option value="3">3x</option>
-          <option value="4" selected>4x</option>
-          <option value="5">5x</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>关系密度 / 每节点额外关系</label>
-        <select id="edgeDensity">
-          <option value="1">低</option>
-          <option value="2" selected>中</option>
-          <option value="3">高</option>
-          <option value="4">很高</option>
-        </select>
-      </div>
-      <div class="btn-group">
-        <button class="btn btn-secondary" id="rebuildBtn">↻ 重建社区</button>
-        <button class="btn btn-secondary" id="resetBtn">重置视图</button>
-      </div>
-    </div>
-
-    <div class="panel-section">
-      <div class="section-title">🏢 企业级总控台</div>
-      <div style="font-size:10px;color:#5a8aaa;line-height:1.6;margin-bottom:10px;">
-        该面板覆盖后端全部能力：规则治理、战役编排、回归矩阵、告警与审计、知识库、社区与测试流程。
-      </div>
-
-      <div class="form-group">
-        <label>接口模板（全量）</label>
-        <select id="enterprisePreset"></select>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="form-group" style="margin-bottom:8px;">
-          <label>Path 参数(JSON)</label>
-          <textarea id="enterprisePathParams" rows="3"
-            placeholder='{"campaign_id":"cmp_xxx","report_id":"rep_xxx","persona_id":"mixed_writer"}'></textarea>
-        </div>
-        <div class="form-group" style="margin-bottom:8px;">
-          <label>Query 参数(JSON)</label>
-          <textarea id="enterpriseQueryParams" rows="3"
-            placeholder='{"limit":20,"status":"pending","include_items":1}'></textarea>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>Body 参数(JSON)</label>
-        <textarea id="enterpriseBody" rows="6"
-          placeholder='{"actor":"ui","scenario":"enterprise-run","snapshot_ids":["rs_xxx","rs_yyy"]}'></textarea>
-      </div>
-
-      <div class="btn-group">
-        <button class="btn btn-primary" id="enterpriseRunBtn"
-          style="padding:8px 12px;font-size:11px;background:linear-gradient(135deg,#005f9f,#00a9ff);">
-          ▶ 调用接口
-        </button>
-        <button class="btn btn-secondary" id="enterpriseCopyCurlBtn" style="padding:8px 12px;font-size:11px;">
-          复制 cURL
-        </button>
-      </div>
-      <div class="btn-group" style="margin-top:6px;">
-        <button class="btn btn-secondary" id="enterpriseRefreshBtn" style="padding:6px 12px;font-size:10px;">
-          🔄 刷新关键看板
-        </button>
-        <button class="btn btn-secondary" id="enterpriseClearBtn" style="padding:6px 12px;font-size:10px;">
-          清空结果
-        </button>
-      </div>
-
-      <div id="enterpriseStatus" style="font-size:10px;color:#5a8aaa;margin-top:8px;">
-        选择接口模板后可直接运行，结果会显示在下方。
-      </div>
-      <div class="result-area show" id="enterpriseResultArea" style="display:block;max-height:260px;margin-top:8px;">
-        <pre id="enterpriseResultContent">等待调用...</pre>
-      </div>
-    </div>
-
+    <!-- 测试结果 -->
     <div class="panel-section">
       <div class="section-title">📊 测试结果</div>
       <div class="result-area" id="resultArea">
@@ -1813,10 +1759,256 @@
       </button>
     </div>
 
+    <!-- System Log -->
     <div class="panel-section">
       <div class="section-title">System Log</div>
       <div class="log-area" id="logArea"></div>
     </div>
+
+    <!-- ▼ 折叠区: Agent Config -->
+    <details class="panel-collapse">
+      <summary>📋 Agent 配置</summary>
+      <div class="collapse-body">
+        <!-- 查看模式 -->
+        <div class="node-info" id="nodeInfoView">
+          <div class="node-name" id="nodeName">点击节点选择</div>
+          <div class="node-category" id="nodeCategory">-</div>
+          <div class="node-desc" id="nodeDesc">在3D球体中点击任意节点查看和编辑角色配置</div>
+
+          <div id="agentStats" style="margin-top:12px;display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;color:#4a8aaa;">
+              <div>🎯 技巧: <span id="statTechniques" style="color:#00d4ff;">-</span></div>
+              <div>🌐 影响: <span id="statInfluence" style="color:#00d4ff;">-</span></div>
+              <div>🔒 隐蔽: <span id="statStealth" style="color:#00d4ff;">-</span></div>
+              <div>⭐ 可信: <span id="statCredibility" style="color:#00d4ff;">-</span></div>
+            </div>
+          </div>
+
+          <div class="node-relations" id="nodeRelations" style="max-height:60px;font-size:10px;"></div>
+          <div class="node-memory" id="nodeMemory" style="max-height:50px;font-size:10px;"></div>
+        </div>
+
+        <button class="btn btn-secondary" id="editAgentBtn"
+          style="padding:4px 8px;font-size:9px;display:none;margin-top:8px;">✏️ 编辑</button>
+
+        <!-- 编辑模式 -->
+        <div id="nodeInfoEdit" style="display:none;max-height:calc(100vh - 200px);overflow-y:auto;">
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">角色名称</label>
+            <input type="text" id="editName"
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">角色类别</label>
+            <select id="editCategory"
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+              <option value="文字变形专家">文字变形专家</option>
+              <option value="隐喻暗示专家">隐喻暗示专家</option>
+              <option value="多语言专家">多语言专家</option>
+              <option value="方言俚语专家">方言俚语专家</option>
+              <option value="语境包装专家">语境包装专家</option>
+              <option value="格式利用专家">格式利用专家</option>
+              <option value="综合高手">综合高手</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div class="form-group">
+              <label style="font-size:10px;">技能等级 (1-5)</label>
+              <input type="number" id="editSkillLevel" min="1" max="5" step="1"
+                style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+            </div>
+            <div class="form-group">
+              <label style="font-size:10px;">隐蔽性 (0-1)</label>
+              <input type="number" id="editStealth" min="0" max="1" step="0.05"
+                style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">掌握技巧 (逗号分隔)</label>
+            <input type="text" id="editTechniques" placeholder="技巧1,技巧2,技巧3"
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">角色描述</label>
+            <textarea id="editDesc" rows="2"
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+          </div>
+          <div style="border-top:1px solid rgba(0,200,255,0.2);margin:12px 0 8px;padding-top:10px;">
+            <div style="font-size:10px;color:#00d4ff;margin-bottom:8px;letter-spacing:1px;">📋 详细Prompt系统</div>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">🎭 角色背景</label>
+            <textarea id="editBackground" rows="3" placeholder="角色的背景故事和人设..."
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">💪 核心能力</label>
+            <textarea id="editCoreAbility" rows="2" placeholder="角色的核心专长和能力..."
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">⚔️ 攻击策略 (每行一条)</label>
+            <textarea id="editAttackStrategy" rows="5" placeholder="1. 策略一...&#10;2. 策略二...&#10;3. 策略三..."
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">🔄 变体生成指令</label>
+            <textarea id="editVariantInstructions" rows="3" placeholder="生成绕过内容的步骤说明..."
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">🧠 思考链 (Chain of Thought)</label>
+            <input type="text" id="editChainOfThought" placeholder="步骤1→步骤2→步骤3→..."
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:10px;">📝 输出要求</label>
+            <textarea id="editOutputRequirements" rows="2" placeholder="对生成内容的质量要求..."
+              style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+          </div>
+          <div class="btn-group" style="margin-top:12px;">
+            <button class="btn btn-primary" id="saveAgentBtn" style="padding:8px 12px;font-size:11px;">💾 保存配置</button>
+            <button class="btn btn-secondary" id="cancelEditBtn" style="padding:8px 12px;font-size:11px;">取消</button>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ▼ 折叠区: OpenClaw (统一青色) -->
+    <details class="panel-collapse">
+      <summary>🕵️ OpenClaw 情报局</summary>
+      <div class="collapse-body">
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <div
+            style="flex:1; background:rgba(0,30,50,0.6); border:1px solid rgba(0,200,255,0.15); padding:8px; border-radius:8px; text-align:center;">
+            <div style="font-size:18px; color:#00d4ff;" id="boardIntelCount">0</div>
+            <div style="font-size:9px; color:#4a8aaa;">情报条目</div>
+          </div>
+          <div
+            style="flex:1; background:rgba(0,30,50,0.6); border:1px solid rgba(0,200,255,0.15); padding:8px; border-radius:8px; text-align:center;">
+            <div style="font-size:18px; color:#00d4ff;" id="boardPlanCount">0</div>
+            <div style="font-size:9px; color:#4a8aaa;">活跃计划</div>
+          </div>
+        </div>
+        <button class="btn-outline" id="runPlanningBtn"
+          style="width:100%;margin-bottom:10px;border-color:rgba(0,200,255,0.4);color:#00d4ff;">
+          🧠 召开红队策划会
+        </button>
+        <div style="font-size:10px; color:#00d4ff; margin-bottom:6px;">最新情报 (Intel Feed)</div>
+        <div id="boardIntelFeed"
+          style="max-height:100px; overflow-y:auto; background:rgba(0,20,40,0.8); border:1px solid rgba(0,200,255,0.15); border-radius:6px; padding:8px; font-size:10px; font-family:monospace;">
+          <div style="color:#4a6a7a; text-align:center;">暂无情报...</div>
+        </div>
+        <button class="btn-outline" style="width:100%; margin-top:8px;" onclick="refreshBoardData()">
+          ↻ 刷新情报板
+        </button>
+      </div>
+    </details>
+
+    <!-- ▼ 折叠区: 知识投喂 -->
+    <details class="panel-collapse">
+      <summary>📚 知识投喂 / Knowledge Feed</summary>
+      <div class="collapse-body">
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <button class="btn-outline" style="padding:4px 8px;font-size:9px;flex:1;" onclick="switchFeedTab('materials')"
+            id="feedTabMaterials">📄 文本样本</button>
+          <button class="btn-outline" style="padding:4px 8px;font-size:9px;flex:1;" onclick="switchFeedTab('slang')"
+            id="feedTabSlang">🗣️ 黑话</button>
+          <button class="btn-outline" style="padding:4px 8px;font-size:9px;flex:1;" onclick="switchFeedTab('cases')"
+            id="feedTabCases">🎯 案例</button>
+        </div>
+        <textarea id="feedContent" placeholder="每行一条，例如：&#10;瓶子今天又讲话了&#10;赵家人割韭菜&#10;&#10;黑话格式：翠=两个习字"
+          style="width:100%;min-height:50px;background:rgba(0,20,40,0.9);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button class="btn-outline" id="feedSubmitBtn" style="flex:1;" onclick="submitFeedKnowledge()">📥 投喂</button>
+          <button class="btn-outline" style="flex:1;" onclick="clearFeedKnowledge()">🗑️ 清空</button>
+        </div>
+        <div id="feedStatus" style="font-size:9px;color:#5a8aaa;margin-top:4px;">暂无投喂资料</div>
+      </div>
+    </details>
+
+    <!-- ▼ 折叠区: 高级配置 -->
+    <details class="panel-collapse">
+      <summary>⚙️ 高级配置</summary>
+      <div class="collapse-body">
+        <div class="form-group">
+          <label>社区规模 / 变体数量</label>
+          <select id="variantCount">
+            <option value="2">2x</option>
+            <option value="3">3x</option>
+            <option value="4" selected>4x</option>
+            <option value="5">5x</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>关系密度 / 每节点额外关系</label>
+          <select id="edgeDensity">
+            <option value="1">低</option>
+            <option value="2" selected>中</option>
+            <option value="3">高</option>
+            <option value="4">很高</option>
+          </select>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="rebuildBtn">↻ 重建社区</button>
+          <button class="btn btn-secondary" id="resetBtn">重置视图</button>
+        </div>
+      </div>
+    </details>
+
+    <!-- ▼ 折叠区: 企业级总控台 -->
+    <details class="panel-collapse">
+      <summary>🏢 企业级总控台</summary>
+      <div class="collapse-body">
+        <div style="font-size:10px;color:#5a8aaa;line-height:1.6;margin-bottom:10px;">
+          该面板覆盖后端全部能力：规则治理、战役编排、回归矩阵、告警与审计、知识库、社区与测试流程。
+        </div>
+        <div class="form-group">
+          <label>接口模板（全量）</label>
+          <select id="enterprisePreset"></select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="form-group" style="margin-bottom:8px;">
+            <label>Path 参数(JSON)</label>
+            <textarea id="enterprisePathParams" rows="3"
+              placeholder='{"campaign_id":"cmp_xxx","report_id":"rep_xxx","persona_id":"mixed_writer"}'></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label>Query 参数(JSON)</label>
+            <textarea id="enterpriseQueryParams" rows="3"
+              placeholder='{"limit":20,"status":"pending","include_items":1}'></textarea>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Body 参数(JSON)</label>
+          <textarea id="enterpriseBody" rows="6"
+            placeholder='{"actor":"ui","scenario":"enterprise-run","snapshot_ids":["rs_xxx","rs_yyy"]}'></textarea>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="enterpriseRunBtn"
+            style="padding:8px 12px;font-size:11px;background:linear-gradient(135deg,#005f9f,#00a9ff);">
+            ▶ 调用接口
+          </button>
+          <button class="btn btn-secondary" id="enterpriseCopyCurlBtn" style="padding:8px 12px;font-size:11px;">
+            复制 cURL
+          </button>
+        </div>
+        <div class="btn-group" style="margin-top:6px;">
+          <button class="btn btn-secondary" id="enterpriseRefreshBtn" style="padding:6px 12px;font-size:10px;">
+            🔄 刷新关键看板
+          </button>
+          <button class="btn btn-secondary" id="enterpriseClearBtn" style="padding:6px 12px;font-size:10px;">
+            清空结果
+          </button>
+        </div>
+        <div id="enterpriseStatus" style="font-size:10px;color:#5a8aaa;margin-top:8px;">
+          选择接口模板后可直接运行，结果会显示在下方。
+        </div>
+        <div class="result-area show" id="enterpriseResultArea" style="display:block;max-height:260px;margin-top:8px;">
+          <pre id="enterpriseResultContent">等待调用...</pre>
+        </div>
+      </div>
+    </details>
   </div>
 
   <!-- 图例 -->
