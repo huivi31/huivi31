@@ -1613,10 +1613,10 @@
         <div style="font-size:11px; color:#00d4ff; margin-bottom:6px; font-weight:600;">
           STEP 1️⃣ 设定测试主题
         </div>
-        <input type="text" id="testTopic" placeholder="输入主题，如：领导人、六四、疫情、台湾..."
+        <input type="text" id="testTopic" placeholder="输入主题，如：虚假广告、医疗养生、网络赌博、诈骗话术..."
           style="width:100%;background:rgba(0,20,40,0.9);border:1px solid rgba(0,200,255,0.4);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:12px;">
         <div style="font-size:9px; color:#5a8aaa; margin-top:4px;">
-          💡 外围Agent将围绕此主题发帖，但不知道具体规则
+          💡 外围攻击Agent将围绕此主题创作内容，但<b style="color:#00d4ff;">不知道</b>中心Agent持有什么规则
         </div>
       </div>
 
@@ -1624,13 +1624,16 @@
       <div
         style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #ffaa00;">
         <div style="font-size:11px; color:#ffaa00; margin-bottom:6px; font-weight:600;">
-          STEP 2️⃣ 中心Agent规则 <span style="color:#ff6b6b;">(仅中心Agent可见)</span>
+          STEP 2️⃣ 中心Agent审核规则 <span style="color:#ff6b6b;">(仅中心Agent可见)</span>
         </div>
-        <textarea id="rulesText" placeholder="每行一条规则，例如：&#10;禁止讨论国家领导人&#10;禁止涉及六四事件&#10;禁止传播政治谣言"
+        <div style="font-size:9px; color:#5a8aaa; margin-bottom:4px;">
+          🛡️ 中心质检Agent依据这些规则判断外围帖子是否违规
+        </div>
+        <textarea id="rulesText" placeholder="每行一条规则，例如：&#10;禁止推荐未经批准的药物&#10;禁止虚构医疗数据&#10;禁止冒充医护人员发布内容"
           style="width:100%;min-height:60px;background:rgba(0,20,40,0.9);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
         <div class="btn-group" style="margin-top:6px;">
           <button class="btn btn-secondary" id="applyRulesBtn"
-            style="padding:6px 12px;font-size:10px;border-color:#ffaa00;color:#ffaa00;">
+            style="padding:6px 12px;font-size:10px;border-color:#ffaa00;color:#ffaa00;transition:all 0.3s;">
             🔒 应用规则到中心Agent
           </button>
         </div>
@@ -2904,6 +2907,22 @@
     }
 
     /**
+     * ★ Update top bar stats (TESTS/RISKS/SAFE%) in real-time
+     */
+    function updateTopBarStats(totalTests, risksFound, detectionRate) {
+      const tc = document.getElementById('testCount');
+      const rc = document.getElementById('riskCount');
+      const sr = document.getElementById('safeRate');
+      if (tc) { tc.textContent = totalTests; tc.style.color = '#00d4ff'; }
+      if (rc) { rc.textContent = risksFound; rc.style.color = risksFound > 0 ? '#ff6b6b' : '#00ff88'; }
+      if (sr) {
+        const safe = detectionRate ? detectionRate.toFixed(1) : '--';
+        sr.textContent = safe;
+        sr.style.color = detectionRate > 80 ? '#00ff88' : detectionRate > 50 ? '#ffaa00' : '#ff6b6b';
+      }
+    }
+
+    /**
      * 显示/隐藏测试进度条
      */
     function showTestProgress(show, text = '') {
@@ -3057,10 +3076,26 @@
 
       const btn = document.getElementById('runBatchTestBtn');
       btn.disabled = true;
-      btn.textContent = '🔄 测试中...';
+      btn.textContent = '⏳ 测试中...';
+      btn.style.opacity = '0.6';
+
+      // Disable other test buttons during run
+      const otherBtns = ['runSingleTestBtn', 'runIterateBtn', 'runCollaborateBtn'];
+      otherBtns.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
 
       showTestProgress(true, '准备中...');
       startEventPolling();
+
+      // Simulate progress increments while waiting for API
+      let progressVal = 0;
+      const progressTimer = setInterval(() => {
+        progressVal = Math.min(progressVal + Math.random() * 8 + 2, 90);
+        const agentsDone = Math.floor(progressVal / 100 * personas.length);
+        updateTestProgress(progressVal, `${agentsDone}/${personas.length} Agent 已处理...`);
+        // Update top bar in real-time
+        const tc = document.getElementById('testCount');
+        if (tc) tc.textContent = agentsDone;
+      }, 800);
 
       addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
       addLog(`🚀 全员对抗测试开始`, 'info');
@@ -3077,6 +3112,7 @@
         });
 
         const data = await res.json();
+        clearInterval(progressTimer);
 
         if (!res.ok) {
           addLog(`❌ 测试失败: ${data.error}`, 'error');
@@ -3084,7 +3120,7 @@
           return;
         }
 
-        updateTestProgress(100, '完成！');
+        updateTestProgress(100, '✅ 测试完成！');
 
         // 显示统计结果
         const summary = data.summary || {};
@@ -3092,6 +3128,9 @@
         addLog(`📊 测试完成！`, 'success');
         addLog(`  🛡️ 检出: ${summary.detection_success}/${summary.total_tested} (${summary.detection_rate}%)`, 'info');
         addLog(`  ⚠️ 绕过: ${summary.bypass_success}条 (${summary.bypass_rate}%)`, summary.bypass_success > 0 ? 'warning' : 'info');
+
+        // ★ Update top bar stats
+        updateTopBarStats(summary.total_tested, summary.bypass_success, summary.detection_rate);
 
         // 显示绕过成功的帖子
         if (data.posts_generated) {
@@ -3123,13 +3162,22 @@
         const reportBtn1 = document.getElementById('viewReportBtn');
         if (reportBtn1) reportBtn1.style.display = 'block';
 
+        // ★ Auto-open report modal after 2s
+        setTimeout(() => {
+          addLog('📊 自动打开测试报告...', 'info');
+          showWorkflowReport();
+        }, 2000);
+
       } catch (e) {
+        clearInterval(progressTimer);
         addLog(`❌ 测试异常: ${e.message}`, 'error');
       } finally {
         stopEventPolling();
-        setTimeout(() => showTestProgress(false), 1500);
+        setTimeout(() => showTestProgress(false), 3000);
         btn.disabled = false;
         btn.textContent = '🚀 全员对抗';
+        btn.style.opacity = '1';
+        otherBtns.forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
       }
     }
 
@@ -4655,7 +4703,13 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
     async function applyRules() {
       const rulesText = document.getElementById('rulesText').value || '';
+      const btn = document.getElementById('applyRulesBtn');
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ 规则解析中...';
+      btn.style.opacity = '0.6';
       try {
+        const inputLines = rulesText.split('\n').filter(l => l.trim()).length;
         const res = await fetch('/rules', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4663,10 +4717,14 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
         });
         const data = await res.json();
         if (!res.ok) { addLog(`规则应用失败: ${data.error || '未知错误'}`, 'error'); return; }
-        updateRulesStatus(data.rules_count, data.rules_version);
-        addLog(`规则已应用：${data.rules_count} 条`, 'success');
+        updateRulesStatus(data.rules_count, data.rules_version, inputLines);
+        addLog(`规则已应用：原始 ${inputLines} 条 → 拆解为 ${data.rules_count} 个检测维度`, 'success');
       } catch (e) {
         addLog(`规则应用异常: ${e.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        btn.style.opacity = '1';
       }
     }
 
@@ -4680,14 +4738,18 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       }
     }
 
-    function updateRulesStatus(count, version) {
+    function updateRulesStatus(count, version, inputCount) {
       const el = document.getElementById('rulesStatus');
       if (!el) return;
       if (!count) {
         el.textContent = '未加载规则';
         return;
       }
-      el.textContent = `规则版本 V${version} · 共 ${count} 条`;
+      if (inputCount && inputCount !== count) {
+        el.innerHTML = `规则版本 V${version} · <span style="color:#ffaa00;">原始 ${inputCount} 条 → 拆解为 ${count} 个检测维度</span>`;
+      } else {
+        el.textContent = `规则版本 V${version} · 共 ${count} 条`;
+      }
     }
 
     function initCommunityControls() {
