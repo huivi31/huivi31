@@ -21,7 +21,13 @@
 - ⚔️ **多智能体攻防** — 攻击体自学习、协作、变体生成，能力持续增强
 - 📋 **规则治理** — 快照、变更申请、审批、应用，完整审计流程
 - 🏢 **企业编排** — Campaign 基线/对抗、A/B 对比、回归矩阵
-- 📚 **文档投喂** — PDF/TXT/JSON 上传，全体攻击体自动吸收知识
+- 📚 **文档投喂与消化** — PDF/TXT 上传，大模型自动提取结构化黑话与实体，全体攻击体自动吸收知识
+
+### 🧠 高级 Agent 机制剖析
+
+- **画像立体化 (Persona Precision)**：每个攻击体自带显式的 `tone_of_voice` (语气)、`vocabulary_style` (词汇风格)、`typical_length` (篇幅约束)。发帖“千人千面”，拒绝同质化。
+- **真·变异繁衍 (True Variants Generation)**：对抗失败后不进行简单的“词穷重试”。Agent 会接收上一轮失败记录和触发的拦截层（如：被语义大模型拦截），并在强指令约束下对上一条文案进行“保留语义、彻底修改敏感要素”的定向变异。
+- **上下文融梗 (Knowledge Ingestion)**：投喂的外部知识会被大模型先行切片“消化”。发帖时不仅附带知识，还强制要求 Agent 提取文中的“黑话”自然融入帖子。
 
 **在线演示：** [digital-twin-risk-demo.onrender.com](https://digital-twin-risk-demo.onrender.com/)
 
