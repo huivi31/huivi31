@@ -295,10 +295,10 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
     # 1. 外围反贼Agent生成帖子（不知道规则，只根据人设发帖）
     attack_agent = AttackAgent(persona)
     
-    # 恢复Agent的历史状态
+    # 恢复Agent的历史状态 (会加载 learned_techniques, last_strategy 等)
     load_agent_runtime(attack_agent)
     
-    # 生成帖子（反贼不知道规则是什么）
+    # 生成帖子（反贼不知道规则是什么，但如果是 iteration > 0 且失败，内部会利用上一轮反馈）
     start_time = time.time()
     attack_result = attack_agent.craft_attack(target_keyword, iteration)
     attack_time = time.time() - start_time

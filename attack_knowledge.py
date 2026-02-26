@@ -413,21 +413,48 @@ class KnowledgeStore:
 
     def feed_materials(self, texts: list, category: str = "通用", source: str = "manual",
                        tags: list = None) -> int:
-        """投喂文本资料"""
+        """投喂文本资料（带LLM结构化提取）"""
         count = 0
         tags = tags or []
         for text in texts:
             text = text.strip()
             if text and len(text) >= 5:
+                # ====== 增强：使用LLM“消化”大段文本 ======
+                extracted_insight = text
+                try:
+                    import os
+                    prompt = f"请从以下文本中提取出一个核心观点、一个相关的黑话/实体，或者一条逻辑判断。尽量精简为一两句话。文本：{text}"
+                    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY")
+                    if os.getenv("GEMINI_API_KEY"):
+                        import google.generativeai as genai
+                        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+                        model = genai.GenerativeModel("gemini-2.5-flash")
+                        res = model.generate_content(prompt)
+                        if res and res.text:
+                            extracted_insight = f"{text}\n[系统提取摘要]: {res.text.strip()}"
+                    elif os.getenv("OPENAI_API_KEY"):
+                        from openai import OpenAI
+                        client = OpenAI(api_key=api_key)
+                        res = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.3
+                        )
+                        if res.choices:
+                            extracted_insight = f"{text}\n[系统提取摘要]: {res.choices[0].message.content.strip()}"
+                except Exception as e:
+                    print(f"提取摘要失败: {e}")
+                # ==========================================
+                
                 payload = {
-                    "text": text,
+                    "text": extracted_insight,
                     "category": category,
                     "source": source,
                     "tags": tags,
                 }
                 now = time.time()
                 self.fed_materials.append({
-                    "text": text,
+                    "text": extracted_insight,
                     "category": category,
                     "timestamp": now,
                     "source": source,
