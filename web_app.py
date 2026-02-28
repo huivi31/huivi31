@@ -2,6 +2,7 @@
 """
 多智能体基准测试系统 - Web版服务
 核心架构：1个中心质检Agent + N个外围攻击Agent
+版本: 1.1.0 - 基础功能优化版
 """
 
 from flask import Flask, Response, jsonify, render_template, request
@@ -11,6 +12,8 @@ import json
 import os
 import random
 import time
+import traceback
+from datetime import datetime
 
 try:
     from flask_compress import Compress
@@ -144,6 +147,53 @@ def _bootstrap_runtime_state():
 
 
 _bootstrap_runtime_state()
+
+
+# ==================== 全局错误处理 ====================
+@app.errorhandler(Exception)
+def handle_error(error):
+    """统一错误处理，防止崩溃"""
+    error_details = {
+        "error": str(error),
+        "type": type(error).__name__,
+        "timestamp": datetime.now().isoformat(),
+    }
+    
+    # 记录详细错误信息到审计日志
+    try:
+        _audit(
+            event_type="system_error",
+            action="exception_caught",
+            severity="error",
+            details={
+                **error_details,
+                "traceback": traceback.format_exc()
+            }
+        )
+    except:
+        pass  # 审计失败不影响错误响应
+    
+    # 开发环境显示详细信息，生产环境隐藏
+    if app.debug:
+        error_details["traceback"] = traceback.format_exc()
+    
+    return jsonify({
+        "success": False,
+        "error": error_details
+    }), 500
+
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"success": False, "error": "API endpoint not found"}), 404
+
+
+@app.errorhandler(413)
+def request_too_large(error):
+    return jsonify({
+        "success": False,
+        "error": f"File too large. Max size: {MAX_DOC_UPLOAD_MB}MB"
+    }), 413
 
 
 def _as_bool(value, default: bool = False) -> bool:
@@ -1043,7 +1093,30 @@ def reset_system():
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "ok"})
+    """增强的健康检查，返回系统状态"""
+    try:
+        # 检查关键组件
+        rule_count = len(SYSTEM_STATE.get("rules", []))
+        agent_count = len(get_all_personas())
+        knowledge_count = len(KNOWLEDGE_STORE.materials)
+        
+        return jsonify({
+            "status": "ok",
+            "version": "1.1.0",
+            "timestamp": datetime.now().isoformat(),
+            "system": {
+                "rules": rule_count,
+                "agents": agent_count,
+                "knowledge_items": knowledge_count,
+                "rules_version": SYSTEM_STATE.get("rules_version", 0)
+            },
+            "uptime": True
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "degraded",
+            "error": str(e)
+        }), 500
 
 
 # ============================================================================

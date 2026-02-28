@@ -1,12 +1,14 @@
 # 🌀 数字孪生风控风洞 | Digital Twin Risk Wind Tunnel
 
-> 基于多智能体攻防演练的 3D 可视化内容风控系统
+> 基于多智能体攻防演练的 3D 可视化内容风控系统  
+> **版本**: v1.1.0 | **更新**: 2026-02-28
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11+-blue?logo=python" alt="Python" />
   <img src="https://img.shields.io/badge/Flask-Backend-green?logo=flask" alt="Flask" />
   <img src="https://img.shields.io/badge/Three.js-3D_Engine-black?logo=threedotjs" alt="Three.js" />
   <img src="https://img.shields.io/badge/Render-Deployed-purple?logo=render" alt="Render" />
+  <img src="https://img.shields.io/badge/Status-Active-success" alt="Status" />
 </p>
 
 ---
