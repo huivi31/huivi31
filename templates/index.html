@@ -6343,20 +6343,41 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
 
     // 加载系统版本信息
     async function loadSystemVersion() {
+      const versionBadge = document.getElementById('version-badge');
+      if (!versionBadge) {
+        console.error('找不到version-badge元素');
+        return;
+      }
+
       try {
+        console.log('正在加载版本信息...');
         const response = await fetch('/health');
+        console.log('Health API 状态:', response.status);
+        
         if (response.ok) {
           const data = await response.json();
-          const versionBadge = document.getElementById('version-badge');
-          if (versionBadge && data.version) {
+          console.log('Health API 返回:', data);
+          
+          if (data.version) {
             versionBadge.textContent = `v${data.version}`;
+            versionBadge.style.background = 'rgba(0, 255, 100, 0.2)';
+            versionBadge.style.borderColor = 'rgba(0, 255, 100, 0.4)';
             versionBadge.title = `系统状态: ${data.status}\n规则: ${data.system?.rules || 0}\nAgents: ${data.system?.agents || 0}\n知识库: ${data.system?.knowledge_items || 0}`;
+            console.log('✅ 版本号加载成功:', data.version);
+          } else {
+            versionBadge.textContent = 'v?.?';
+            console.warn('⚠️ API返回但没有version字段');
           }
+        } else {
+          versionBadge.textContent = `错误${response.status}`;
+          versionBadge.style.background = 'rgba(255, 100, 0, 0.2)';
+          console.error('❌ Health API 返回错误:', response.status);
         }
       } catch (error) {
-        console.warn('无法加载版本信息:', error);
-        const versionBadge = document.getElementById('version-badge');
-        if (versionBadge) versionBadge.textContent = 'v?.?';
+        console.error('❌ 加载版本信息失败:', error);
+        versionBadge.textContent = '离线';
+        versionBadge.style.background = 'rgba(255, 0, 0, 0.2)';
+        versionBadge.title = `错误: ${error.message}`;
       }
     }
 
@@ -6364,11 +6385,11 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         safeInit();
-        loadSystemVersion();
+        setTimeout(loadSystemVersion, 500); // 延迟500ms加载，确保DOM完全就绪
       });
     } else {
       safeInit();
-      loadSystemVersion();
+      setTimeout(loadSystemVersion, 500);
     }
   </script>
   <script>
