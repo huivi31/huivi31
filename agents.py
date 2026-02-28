@@ -1050,6 +1050,26 @@ class AttackAgent:
         if effective_level >= 4 and advanced_techniques:
             priority_pool.extend(advanced_techniques)
         
+
+    def _template_generate(self, target_topic: str, technique: str) -> dict:
+        """模板生成 - LLM失败时的fallback"""
+        import random
+        
+        # 简单模板
+        templates = {
+            "谐音替代": [f"最近关于{target_topic}的讨论真的很多", f"大家对{target_topic}怎么看"],
+            "拼音缩写": [f"关于{target_topic}这个话题", f"{target_topic}最近很热"],
+        }
+        
+        content = templates.get(technique, [f"讨论{target_topic}"])[0]
+        
+        return {
+            "content": content,
+            "technique_used": technique,
+            "strategy": "模板生成",
+            "complexity_score": 1,
+            "is_fallback": True
+        }
         # 策略推荐技巧
         priority_pool.extend([t for t in strategy_techniques if t in available_techniques])
         
