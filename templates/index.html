@@ -1684,7 +1684,7 @@
       <div class="logo-icon">🌐</div>
       <div>
         <h1>RISK WIND TUNNEL</h1>
-        <div class="subtitle">数字孪生风控风洞系统</div>
+        <div class="subtitle">数字孪生风控风洞系统 <span id="version-badge" style="font-size: 10px; padding: 2px 6px; background: rgba(0, 212, 255, 0.2); border: 1px solid rgba(0, 212, 255, 0.4); border-radius: 4px; margin-left: 8px;">加载中...</span></div>
       </div>
     </div>
     <div class="stats-bar">
@@ -6341,11 +6341,34 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       }
     }
 
+    // 加载系统版本信息
+    async function loadSystemVersion() {
+      try {
+        const response = await fetch('/health');
+        if (response.ok) {
+          const data = await response.json();
+          const versionBadge = document.getElementById('version-badge');
+          if (versionBadge && data.version) {
+            versionBadge.textContent = `v${data.version}`;
+            versionBadge.title = `系统状态: ${data.status}\n规则: ${data.system?.rules || 0}\nAgents: ${data.system?.agents || 0}\n知识库: ${data.system?.knowledge_items || 0}`;
+          }
+        }
+      } catch (error) {
+        console.warn('无法加载版本信息:', error);
+        const versionBadge = document.getElementById('version-badge');
+        if (versionBadge) versionBadge.textContent = 'v?.?';
+      }
+    }
+
     // DOM 加载完成后初始化
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', safeInit);
+      document.addEventListener('DOMContentLoaded', () => {
+        safeInit();
+        loadSystemVersion();
+      });
     } else {
       safeInit();
+      loadSystemVersion();
     }
   </script>
   <script>
