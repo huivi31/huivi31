@@ -1107,7 +1107,7 @@ def health():
         
         return jsonify({
             "status": "ok",
-            "version": "1.1.0",
+            "version": "2.0.0",
             "timestamp": datetime.now().isoformat(),
             "system": {
                 "rules": rule_count,

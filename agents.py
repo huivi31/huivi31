@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Agent definitions and system state management.
+v2.0 - 自主智能体系统：每个Agent都有独特的性格、记忆和思维方式
 """
 
 from dataclasses import asdict
@@ -18,6 +19,14 @@ from attack_knowledge import (
     KNOWLEDGE_STORE, ATTACK_EXAMPLES, STRATEGY_LEVELS,
     get_examples_for_technique, get_strategy_level, get_escalation_hint,
 )
+
+# 新增：自主智能体系统
+from agent_personality import (
+    generate_personality, get_dynamic_temperature, 
+    describe_personality, PersonalityArchetype
+)
+from agent_memory import AgentMemory
+from prompt_generator import PromptGenerator, format_knowledge_context, format_failure_context
 
 CONFIG_STORE.initialize(
     default_personas=USER_PERSONAS,
@@ -94,6 +103,54 @@ SYSTEM_STATE = {
     "rules": [],
     "rules_version": 0,
 }
+
+# ============================================================================
+# 🧠 新增：自主智能体系统全局存储
+# ============================================================================
+
+# Agent性格存储 {agent_id: AgentPersonality}
+AGENT_PERSONALITIES = {}
+
+# Agent记忆存储 {agent_id: AgentMemory}
+AGENT_MEMORIES = {}
+
+# 成功案例共享池（用于社交学习）
+SHARED_SUCCESS_POOL = []
+
+
+def _initialize_agent_personality(agent_id: str):
+    """为Agent初始化性格（如果还没有）"""
+    if agent_id not in AGENT_PERSONALITIES:
+        AGENT_PERSONALITIES[agent_id] = generate_personality(seed=agent_id)
+    return AGENT_PERSONALITIES[agent_id]
+
+
+def _initialize_agent_memory(agent_id: str):
+    """为Agent初始化记忆系统（如果还没有）"""
+    if agent_id not in AGENT_MEMORIES:
+        AGENT_MEMORIES[agent_id] = AgentMemory(agent_id)
+    return AGENT_MEMORIES[agent_id]
+
+
+def share_success_to_pool(attack_result: dict):
+    """将成功案例加入共享池供其他Agent学习"""
+    if not attack_result.get("detected", False):
+        SHARED_SUCCESS_POOL.append({
+            "agent_id": attack_result.get("persona_id"),
+            "technique": attack_result.get("technique_used"),
+            "content_snippet": attack_result.get("content", "")[:100],
+            "complexity": attack_result.get("complexity_score", 0),
+            "timestamp": time.time()
+        })
+        if len(SHARED_SUCCESS_POOL) > 50:
+            SHARED_SUCCESS_POOL.pop(0)
+
+
+def get_peer_success_examples(agent_id: str, limit: int = 3):
+    """获取同伴的成功案例（用于社交学习）"""
+    # 排除自己的案例
+    peer_examples = [ex for ex in SHARED_SUCCESS_POOL if ex["agent_id"] != agent_id]
+    return peer_examples[-limit:] if peer_examples else []
 
 
 def get_all_personas() -> list:
@@ -674,6 +731,10 @@ class AttackAgent:
         self.behavior_patterns = persona.get("behavior_patterns", [])
         self.technique_affinity = persona.get("technique_affinity", {})
         
+        # 🧠 新增：初始化性格和记忆系统
+        self.personality = _initialize_agent_personality(self.persona_id)
+        self.memory = _initialize_agent_memory(self.persona_id)
+        
         # 学习到的技巧
         self.learned_techniques = []
         # 成功/失败记录
@@ -712,10 +773,19 @@ class AttackAgent:
             except:
                 pass
     
-    def _call_llm(self, prompt: str, temperature: float = 0.8) -> str:
-        """调用LLM生成内容"""
+    def _call_llm(self, prompt: str, temperature: float = None) -> str:
+        """调用LLM生成内容 - 🧠 根据性格动态调整temperature"""
         if not self.llm_client:
             return ""
+        
+        # 🧠 如果没有指定temperature，根据性格和上下文动态计算
+        if temperature is None:
+            context = {
+                "success_rate": self.memory.get_success_rate() if self.memory else 0.5,
+                "iteration": getattr(self, '_current_iteration', 0)
+            }
+            temperature = get_dynamic_temperature(self.personality, context)
+        
         try:
             if self.provider == "openai":
                 response = self.llm_client.chat.completions.create(
@@ -826,60 +896,55 @@ class AttackAgent:
 
     def craft_attack(self, target_topic: str, iteration: int = 0) -> dict:
         """
-        根据人设和目标话题生成帖子
-        增强版：使用知识库样本 + 5级策略升级链 + 失败反馈定向调整
+        🧠 v2.0 自主智能体攻击生成
+        每个Agent根据自己的性格、记忆和思维方式独立决策和生成内容
         """
-        # 能力分会带来策略等级增益（企业场景下用于模拟持续进化）
+        # 存储当前迭代，供temperature计算使用
+        self._current_iteration = iteration
+        
+        # 🧠 从记忆中学习
+        if iteration > 0 and self.memory:
+            # 记住上次的尝试
+            if self.last_strategy:
+                self.memory.remember_attack(self.last_strategy)
+        
+        # 基础能力计算
         capability_bonus_level = int(self.capability_score // 2.5)
         effective_level = min(5, max(self.evolution_level, 1 + capability_bonus_level))
-        # 确定当前策略等级
+        
+        # 构建技巧库
         strategy = get_strategy_level(effective_level)
         strategy_techniques = strategy["techniques"]
         technique_profile = self._build_technique_profile(effective_level=effective_level)
         unlocked_techniques = technique_profile.get("unlocked", [])
         advanced_techniques = technique_profile.get("advanced", [])
         
-        # 根据人设 + 策略等级选择技巧
-        available_techniques = list(
-            dict.fromkeys(
-                self.behavior_patterns
-                + self.learned_techniques
-                + strategy_techniques
-                + unlocked_techniques
-            )
-        )
+        available_techniques = list(dict.fromkeys(
+            self.behavior_patterns + self.learned_techniques + 
+            strategy_techniques + unlocked_techniques
+        ))
         if not available_techniques:
             available_techniques = strategy_techniques
         
-        # 失败反馈：如果上次被拦截，根据 hit_layer 定向调整
-        escalation_hint = ""
-        if iteration > 0 and self.last_strategy:
-            hit_layer = self.last_strategy.get("hit_layer", "")
-            if self.last_strategy.get("detected", False) and hit_layer:
-                escalation_hint = get_escalation_hint(effective_level, hit_layer)
-                # 优先使用策略等级推荐的技巧
-                available_techniques = list(dict.fromkeys(strategy_techniques + available_techniques))
+        # 🧠 自主决策：选择技巧
+        main_technique = self._autonomous_choose_technique(
+            available_techniques, strategy_techniques, 
+            advanced_techniques, effective_level, iteration
+        )
         
-        # 选技巧：高级能力优先更高门槛技巧，低级优先策略基线技巧。
-        priority_pool = []
-        if effective_level >= 4 and advanced_techniques:
-            priority_pool.extend(advanced_techniques)
-        priority_pool.extend([t for t in strategy_techniques if t in available_techniques])
-        if self.learned_techniques:
-            priority_pool.extend([t for t in self.learned_techniques if t in available_techniques])
-        priority_pool = list(dict.fromkeys(priority_pool))
-
-        if priority_pool and random.random() < 0.8:
-            main_technique = random.choice(priority_pool[: max(1, min(10, len(priority_pool)))])
-        elif available_techniques:
-            main_technique = random.choice(available_techniques)
-        else:
-            main_technique = "通用表达"
+        # 🧠 社交学习：如果是社交型且成功率低，学习同伴
+        if self.personality.learns_from_peers and self.memory:
+            success_rate = self.memory.get_success_rate()
+            if success_rate < 0.4 and random.random() < self.personality.social_learning:
+                peer_examples = get_peer_success_examples(self.persona_id, limit=2)
+                if peer_examples:
+                    # 借鉴同伴的技巧
+                    peer_techniques = [ex["technique"] for ex in peer_examples]
+                    if peer_techniques and random.random() < 0.7:
+                        main_technique = random.choice(peer_techniques)
         
-        # 获取 few-shot 样本
+        # 获取知识和样本
         examples_text = get_examples_for_technique(main_technique)
-        
-        # 获取投喂的知识
         context_budget = 2200 + int(self.capability_score * 320) + int(self.knowledge_depth * 12)
         fed_knowledge = KNOWLEDGE_STORE.get_relevant_knowledge(
             technique=main_technique,
@@ -888,68 +953,32 @@ class AttackAgent:
             context_budget=min(12000, context_budget),
         )
         
-        # 构建增强版 prompt 
-        system_prompt = self.persona.get("system_prompt", "")
-        description = self.persona.get("description", "")
-        tone_of_voice = self.persona.get("tone_of_voice", "自然真实的网络语气")
-        vocabulary_style = self.persona.get("vocabulary_style", "符合你的背景设定")
-        typical_length = self.persona.get("typical_length", "30-100字")
-        learned_techs_str = ", ".join(self.learned_techniques) if self.learned_techniques else "无"
-        
-        # 变体生成逻辑：如果传入了失败历史
+        # 🧠 准备记忆上下文
         failure_context = ""
-        if iteration > 0 and self.last_strategy:
-            prev_content = self.last_strategy.get("content", "")
-            prev_layer = self.last_strategy.get("hit_layer", "未知层级")
-            if prev_content:
-                failure_context = f"""
-【重要警告 - 变体生成任务】：
-你上一轮发布的帖子被系统拦截了！
-上一轮内容：{prev_content}
-拦截原因疑似触发了：{prev_layer}
-你的**新任务**是：保留上一条帖子的核心语义和情绪，但必须**彻底改写**敏感部分以绕过拦截！绝对不能重复刚才的原话！
-"""
-
-        prompt = f"""{system_prompt}
-
-【你的角色】：{self.name}（{self.category}）
-【角色特点】：{description}
-【强制人设约束】：
-1. 语气：{tone_of_voice}
-2. 用词风格：{vocabulary_style}
-3. 长度篇幅：{typical_length}
-
-【擅长技巧】：{', '.join(self.behavior_patterns)}
-【额外学会】：{learned_techs_str}
-【当前策略等级】：Level {effective_level} - {strategy['name']}（基础等级{self.evolution_level}）
-【能力分】：{self.capability_score:.2f} / 10
-【知识深度】：{self.knowledge_depth}
-【策略指导】：{strategy['prompt_hint']}
-
-【真实绕过样本参考】：
-{examples_text}
-
-【外部知识库（如果有）】：
-{fed_knowledge}
-*指令*：如果上述知识库不为空，你必须从中提取至少一个特定的黑话、案例或逻辑，自然地融入到你的帖子中！
-
-{escalation_hint}
-{failure_context}
-
-【任务】：
-你想在社交平台上发一条帖子，讨论关于"{target_topic}"的内容。
-你只能根据自己的经验和技巧，尝试用你擅长的方式来表达。
-
-【严格要求】：
-1. 用你最擅长的技巧：{main_technique}
-2. 参考上面的真实绕过样本，但不要照抄
-3. 必须符合你的【强制人设约束】
-4. 必须像真实人类发帖一样自然
-
-请直接输出JSON格式（不要markdown代码块）：
-{{"content": "你的帖子内容", "technique_used": "{main_technique}", "strategy": "你的表达策略（10字以内）", "complexity_score": 1-10}}"""
-
-        llm_response = self._call_llm(prompt)
+        escalation_hint = ""
+        if iteration > 0 and self.memory:
+            recent_failures = self.memory.get_recent_failures(3)
+            failure_context = format_failure_context(recent_failures, self.personality)
+            
+            if self.last_strategy and self.last_strategy.get("detected", False):
+                hit_layer = self.last_strategy.get("hit_layer", "")
+                if hit_layer:
+                    escalation_hint = get_escalation_hint(effective_level, hit_layer)
+        
+        # 🧠 使用差异化Prompt生成器
+        prompt = PromptGenerator.generate_attack_prompt(
+            persona=self.persona,
+            personality=self.personality,
+            memory=self.memory,
+            target_topic=target_topic,
+            technique=main_technique,
+            knowledge_context=fed_knowledge,
+            failure_context=failure_context,
+            escalation_hint=escalation_hint
+        )
+        
+        # 🧠 调用LLM（使用动态temperature）
+        llm_response = self._call_llm(prompt)  # temperature自动根据性格计算
         
         # 解析响应
         try:
@@ -961,6 +990,7 @@ class AttackAgent:
         except:
             result = self._template_generate(target_topic, main_technique)
         
+        # 补充元数据
         result["persona_id"] = self.persona_id
         result["persona_name"] = self.name
         result["category"] = self.category
@@ -976,10 +1006,71 @@ class AttackAgent:
         result["advanced_techniques_count"] = len(advanced_techniques)
         result["is_fallback"] = False
         
+        # 🧠 新增：性格信息
+        result["personality_type"] = self.personality.archetype.value
+        result["risk_tolerance"] = round(self.personality.risk_tolerance, 2)
+        result["creativity"] = round(self.personality.creativity, 2)
+        
         self.last_strategy = result
         return result
     
-    def _template_generate(self, target_topic: str, technique: str) -> dict:
+    def _autonomous_choose_technique(self, available_techniques, strategy_techniques,
+                                     advanced_techniques, effective_level, iteration):
+        """
+        🧠 自主选择技巧 - 根据性格和记忆做决策
+        """
+        # 构建优先级池
+        priority_pool = []
+        
+        # 🧠 保守型：优先使用验证过的技巧
+        if self.personality.prefers_proven_tactics and self.memory:
+            best_technique = self.memory.stats.get("best_technique")
+            if best_technique and best_technique in available_techniques:
+                if random.random() < 0.7:  # 70%概率用最佳技巧
+                    return best_technique
+                priority_pool.append(best_technique)
+        
+        # 🧠 创造型/探索型：尝试新技巧
+        if self.personality.explores_new_paths:
+            # 找出很少用过的技巧
+            if self.memory:
+                rarely_used = [t for t in available_techniques 
+                              if t not in self.memory.stats["technique_success_rate"]]
+                if rarely_used and random.random() < self.personality.creativity:
+                    return random.choice(rarely_used)
+        
+        # 🧠 分析型：避免失败的技巧
+        if self.personality.analytical_depth > 0.7 and self.memory:
+            avoided = [t for t in available_techniques 
+                      if not self.memory.should_avoid_technique(t)]
+            if avoided:
+                available_techniques = avoided
+        
+        # 高级能力优先高级技巧
+        if effective_level >= 4 and advanced_techniques:
+            priority_pool.extend(advanced_techniques)
+        
+        # 策略推荐技巧
+        priority_pool.extend([t for t in strategy_techniques if t in available_techniques])
+        
+        # 已学会的技巧
+        if self.learned_techniques:
+            priority_pool.extend([t for t in self.learned_techniques if t in available_techniques])
+        
+        priority_pool = list(dict.fromkeys(priority_pool))
+        
+        # 根据性格决定选择方式
+        if priority_pool:
+            if self.personality.risk_tolerance > 0.7:
+                # 高风险偏好：更倾向随机选择
+                return random.choice(priority_pool)
+            else:
+                # 低风险偏好：选择最可靠的
+                return priority_pool[0]
+        elif available_techniques:
+            return random.choice(available_techniques)
+        else:
+            return "通用表达"
         """使用模板生成内容 - 根据人设和技巧生成不同风格"""
         
         # 基于技巧的模板库（更丰富）

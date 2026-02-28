@@ -362,6 +362,11 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
     # 保存到历史
     SYSTEM_STATE["battle_history"].append(battle_record)
     
+    # 🧠 新增：如果成功，加入共享池供其他Agent学习
+    if bypass_success:
+        from agents import share_success_to_pool
+        share_success_to_pool(attack_result)
+    
     return battle_record
 
 
