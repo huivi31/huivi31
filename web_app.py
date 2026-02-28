@@ -1098,7 +1098,12 @@ def health():
         # 检查关键组件
         rule_count = len(SYSTEM_STATE.get("rules", []))
         agent_count = len(get_all_personas())
-        knowledge_count = len(KNOWLEDGE_STORE.materials)
+        
+        # 安全获取知识库数量
+        try:
+            knowledge_count = len(KNOWLEDGE_STORE.fed_materials)
+        except AttributeError:
+            knowledge_count = 0
         
         return jsonify({
             "status": "ok",
