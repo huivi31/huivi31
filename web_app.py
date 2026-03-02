@@ -2,10 +2,10 @@
 """
 多智能体基准测试系统 - Web版服务
 核心架构：1个中心质检Agent + N个外围攻击Agent
-版本: 1.1.0 - 基础功能优化版
+版本: 2.1.0 - 异步优化+安全增强
 """
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, g
 import csv
 import io
 import json
@@ -13,6 +13,7 @@ import os
 import random
 import time
 import traceback
+import asyncio
 from datetime import datetime
 
 try:
@@ -25,7 +26,7 @@ try:
 except Exception:  # noqa: BLE001
     PdfReader = None
 
-from config import API_CONFIG
+from config import API_CONFIG, APP_VERSION
 from config_store import CONFIG_STORE
 from user_personas import USER_RELATIONS, COMMUNITY_CONFIG
 from rule_engine import RULE_ENGINE
@@ -54,6 +55,10 @@ from regression_reporting import (
     normalize_thresholds,
     render_regression_markdown,
 )
+
+# v2.1.0: 导入安全和中间件模块
+from auth import generate_token, authenticate_user, require_auth
+from middleware import error_handler, log_request, log_response, rate_limit
 
 app = Flask(__name__)
 try:
@@ -84,6 +89,17 @@ if Compress:
         "text/markdown",
     ]
     Compress(app)
+
+# v2.1.0: 注册中间件
+error_handler(app)
+
+@app.before_request
+def before_request():
+    log_request()
+
+@app.after_request
+def after_request(response):
+    return log_response(response)
 
 
 def _parse_rules_text(rules_text: str) -> list:
@@ -430,6 +446,69 @@ def handle_payload_too_large(_exc):
 # ============================================================================
 # API路由
 # ============================================================================
+
+# v2.1.0: 认证端点
+@app.post("/api/auth/login")
+@rate_limit(max_requests=10, window=60)
+def api_login():
+    """
+    用户登录
+    
+    Body:
+        {
+            "username": "demo",
+            "password": "demo123"
+        }
+    
+    Response:
+        {
+            "success": true,
+            "token": "eyJ...",
+            "user_id": "demo",
+            "role": "user"
+        }
+    """
+    data = request.get_json() or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    
+    if not username or not password:
+        return jsonify({
+            "success": False,
+            "error": "Username and password are required",
+            "code": "INVALID_INPUT"
+        }), 400
+    
+    user = authenticate_user(username, password)
+    
+    if not user:
+        return jsonify({
+            "success": False,
+            "error": "Invalid username or password",
+            "code": "AUTH_FAILED"
+        }), 401
+    
+    token = generate_token(user["user_id"], user["role"])
+    
+    return jsonify({
+        "success": True,
+        "token": token,
+        "user_id": user["user_id"],
+        "role": user["role"]
+    })
+
+
+@app.get("/api/auth/test")
+@require_auth
+def api_auth_test():
+    """测试认证是否有效"""
+    return jsonify({
+        "success": True,
+        "message": "Authentication successful",
+        "user_id": request.user_id,
+        "role": request.user_role
+    })
+
 
 @app.get("/")
 def index():
@@ -1107,7 +1186,7 @@ def health():
         
         return jsonify({
             "status": "ok",
-            "version": "2.0.0",
+            "version": APP_VERSION,
             "timestamp": datetime.now().isoformat(),
             "system": {
                 "rules": rule_count,

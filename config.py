@@ -3,6 +3,10 @@
 
 import os
 
+# 应用版本
+APP_VERSION = "2.1.0"
+APP_NAME = "数字孪生风控风洞"
+
 
 def _normalize_provider(value: str) -> str:
     provider = (value or "gemini").strip().lower()

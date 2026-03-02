@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Agent definitions and system state management.
-v2.0 - 自主智能体系统：每个Agent都有独特的性格、记忆和思维方式
+v2.1 - 增加异步支持,大幅提升并发性能
 """
 
 from dataclasses import asdict
@@ -10,6 +10,7 @@ import random
 import time
 import json
 import os
+import asyncio
 
 from config import API_CONFIG
 from config_store import CONFIG_STORE
@@ -27,6 +28,12 @@ from agent_personality import (
 )
 from agent_memory import AgentMemory
 from prompt_generator import PromptGenerator, format_knowledge_context, format_failure_context
+
+# v2.1: 异步LLM支持
+try:
+    from async_llm import AsyncLLMClient
+except ImportError:
+    AsyncLLMClient = None
 
 CONFIG_STORE.initialize(
     default_personas=USER_PERSONAS,
