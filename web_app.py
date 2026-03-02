@@ -908,6 +908,267 @@ def get_battle_history():
     })
 
 
+@app.post("/api/battle/batch")
+@rate_limit(max_requests=5, window=60)
+def api_batch_battle():
+    """
+    批量运行Agent攻击测试 (v2.2.0新增)
+    
+    Body:
+        {
+            "topic": "测试主题",
+            "agent_count": 72,  // 可选,默认全部
+            "agent_ids": [],    // 可选,指定Agent列表
+            "timeout": 30       // 可选,超时时间(秒)
+        }
+    
+    Response:
+        {
+            "success": true,
+            "summary": {
+                "total": 72,
+                "bypassed": 15,
+                "detected": 57,
+                "bypass_rate": 0.208,
+                "duration": 12.5
+            },
+            "results": [...],
+            "technique_stats": {...},
+            "layer_stats": {...}
+        }
+    """
+    data = request.get_json() or {}
+    topic = data.get("topic", "").strip()
+    agent_count = data.get("agent_count", None)
+    agent_ids = data.get("agent_ids", [])
+    timeout = data.get("timeout", 30)
+    
+    if not topic:
+        return jsonify({
+            "success": False,
+            "error": "Missing required field: topic",
+            "code": "INVALID_INPUT"
+        }), 400
+    
+    try:
+        import time
+        from collections import defaultdict
+        
+        start_time = time.time()
+        
+        # 获取要测试的Agent列表
+        all_personas = get_all_personas()
+        
+        if agent_ids:
+            # 使用指定的Agent
+            test_personas = [p for p in all_personas if p.get("id") in agent_ids]
+        elif agent_count:
+            # 随机选择指定数量
+            import random
+            test_personas = random.sample(all_personas, min(agent_count, len(all_personas)))
+        else:
+            # 全部Agent
+            test_personas = all_personas
+        
+        if not test_personas:
+            return jsonify({
+                "success": False,
+                "error": "No agents available for testing",
+                "code": "NO_AGENTS"
+            }), 400
+        
+        # 运行批量攻击
+        results = []
+        technique_stats = defaultdict(lambda: {"total": 0, "bypassed": 0})
+        layer_stats = defaultdict(int)
+        
+        for persona in test_personas:
+            persona_id = persona.get("id")
+            if not persona_id:
+                continue
+            
+            try:
+                # 运行单次攻击
+                result = run_adversarial_battle(persona_id, topic, 0)
+                
+                # 收集结果
+                results.append({
+                    "agent_id": persona_id,
+                    "agent_name": persona.get("name", "Unknown"),
+                    "technique": result.get("technique", "未知"),
+                    "content": result.get("content", "")[:100],  # 限制长度
+                    "bypass_success": result.get("result", {}).get("bypass_success", False),
+                    "blocked_at": result.get("result", {}).get("blocked_at"),
+                    "complexity": result.get("complexity", 0)
+                })
+                
+                # 统计技巧
+                tech = result.get("technique", "未知")
+                technique_stats[tech]["total"] += 1
+                if result.get("result", {}).get("bypass_success"):
+                    technique_stats[tech]["bypassed"] += 1
+                
+                # 统计拦截层
+                blocked_at = result.get("result", {}).get("blocked_at")
+                if blocked_at:
+                    layer_stats[blocked_at] += 1
+                
+            except Exception as e:
+                # 记录错误但继续
+                results.append({
+                    "agent_id": persona_id,
+                    "agent_name": persona.get("name", "Unknown"),
+                    "error": str(e)[:100]
+                })
+        
+        duration = time.time() - start_time
+        
+        # 计算统计数据
+        total = len(results)
+        bypassed = sum(1 for r in results if r.get("bypass_success"))
+        detected = total - bypassed
+        bypass_rate = (bypassed / total) if total > 0 else 0
+        
+        # 处理technique_stats,计算成功率
+        technique_summary = {}
+        for tech, stats in technique_stats.items():
+            rate = (stats["bypassed"] / stats["total"]) if stats["total"] > 0 else 0
+            technique_summary[tech] = {
+                "total": stats["total"],
+                "bypassed": stats["bypassed"],
+                "success_rate": round(rate, 3)
+            }
+        
+        return jsonify({
+            "success": True,
+            "summary": {
+                "total": total,
+                "bypassed": bypassed,
+                "detected": detected,
+                "bypass_rate": round(bypass_rate, 3),
+                "duration": round(duration, 2)
+            },
+            "results": results,
+            "technique_stats": technique_summary,
+            "layer_stats": dict(layer_stats)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "BATCH_TEST_FAILED"
+        }), 500
+
+
+@app.get("/api/stats/summary")
+def api_stats_summary():
+    """
+    获取系统统计摘要 (v2.2.0新增)
+    
+    Query:
+        ?limit=100  // 分析最近N条历史记录
+    
+    Response:
+        {
+            "success": true,
+            "overall": {
+                "total_attacks": 100,
+                "bypass_rate": 0.21,
+                "avg_complexity": 3.5
+            },
+            "by_technique": {...},
+            "by_layer": {...},
+            "top_agents": [...]
+        }
+    """
+    limit = request.args.get("limit", 100, type=int)
+    history = SYSTEM_STATE["battle_history"][-limit:]
+    
+    if not history:
+        return jsonify({
+            "success": True,
+            "overall": {
+                "total_attacks": 0,
+                "bypass_rate": 0,
+                "avg_complexity": 0
+            },
+            "by_technique": {},
+            "by_layer": {},
+            "top_agents": []
+        })
+    
+    from collections import defaultdict
+    
+    # 总体统计
+    total = len(history)
+    bypassed = sum(1 for h in history if h.get("result", {}).get("bypass_success"))
+    bypass_rate = (bypassed / total) if total > 0 else 0
+    
+    complexities = [h.get("complexity", 0) for h in history if "complexity" in h]
+    avg_complexity = (sum(complexities) / len(complexities)) if complexities else 0
+    
+    # 按技巧统计
+    technique_stats = defaultdict(lambda: {"total": 0, "bypassed": 0})
+    for h in history:
+        tech = h.get("technique", "未知")
+        technique_stats[tech]["total"] += 1
+        if h.get("result", {}).get("bypass_success"):
+            technique_stats[tech]["bypassed"] += 1
+    
+    by_technique = {}
+    for tech, stats in technique_stats.items():
+        rate = (stats["bypassed"] / stats["total"]) if stats["total"] > 0 else 0
+        by_technique[tech] = {
+            "total": stats["total"],
+            "bypassed": stats["bypassed"],
+            "success_rate": round(rate, 3)
+        }
+    
+    # 按拦截层统计
+    layer_stats = defaultdict(int)
+    for h in history:
+        layer = h.get("result", {}).get("blocked_at")
+        if layer:
+            layer_stats[layer] += 1
+        elif h.get("result", {}).get("bypass_success"):
+            layer_stats["bypassed"] += 1
+    
+    # Top Agent统计
+    agent_stats = defaultdict(lambda: {"total": 0, "bypassed": 0})
+    for h in history:
+        agent_id = h.get("persona_id", "unknown")
+        agent_stats[agent_id]["total"] += 1
+        if h.get("result", {}).get("bypass_success"):
+            agent_stats[agent_id]["bypassed"] += 1
+    
+    top_agents = []
+    for agent_id, stats in sorted(agent_stats.items(), 
+                                   key=lambda x: x[1]["bypassed"], 
+                                   reverse=True)[:10]:
+        rate = (stats["bypassed"] / stats["total"]) if stats["total"] > 0 else 0
+        top_agents.append({
+            "agent_id": agent_id,
+            "total": stats["total"],
+            "bypassed": stats["bypassed"],
+            "success_rate": round(rate, 3)
+        })
+    
+    return jsonify({
+        "success": True,
+        "overall": {
+            "total_attacks": total,
+            "bypass_rate": round(bypass_rate, 3),
+            "avg_complexity": round(avg_complexity, 2),
+            "bypassed_count": bypassed,
+            "detected_count": total - bypassed
+        },
+        "by_technique": by_technique,
+        "by_layer": dict(layer_stats),
+        "top_agents": top_agents
+    })
+
+
 @app.get("/board/data")
 def get_board_data():
     """获取OpenClaw Board数据"""

@@ -5,10 +5,12 @@
 
 5层检测链：
   Layer 1: 关键词精确匹配（含去空格/符号）
-  Layer 2: 拼音还原匹配（谐音检测）
+  Layer 2: 拼音还原匹配（谐音检测）+ 优化语义分析
   Layer 3: 正则模式匹配（风险句式）
   Layer 4: 用户自定义变体词库
   Layer 5: LLM 语义兜底（可选）
+
+v2.2 - Layer 2 集成优化语义分析模块
 """
 
 import re
@@ -20,6 +22,14 @@ try:
     HAS_PYPINYIN = True
 except ImportError:
     HAS_PYPINYIN = False
+
+# v2.2: 优化的语义分析模块
+try:
+    from semantic_analyzer import SEMANTIC_ANALYZER
+    HAS_SEMANTIC_ANALYZER = True
+except ImportError:
+    SEMANTIC_ANALYZER = None
+    HAS_SEMANTIC_ANALYZER = False
 
 
 class AuditResult:
@@ -243,35 +253,57 @@ class RuleEngine:
         return result
     
     def _layer2_pinyin(self, content, content_clean, result):
-        """Layer 2: 拼音还原 - 检测谐音绕过"""
-        if not HAS_PYPINYIN:
-            return result
+        """
+        Layer 2: 拼音还原 + 语义分析 (v2.2优化)
         
-        try:
-            # 将内容转为拼音
-            content_pinyin = ''.join(lazy_pinyin(content_clean))
-            
-            # 将所有敏感词也转为拼音，对比
-            all_sensitive = list(self.BUILTIN_SENSITIVE_WORDS.keys())
-            for rule in self.rules:
-                for kw in rule.get("keywords", []):
-                    if kw and len(kw) >= 2:
-                        all_sensitive.append(kw)
-            
-            for word in all_sensitive:
-                word_pinyin = ''.join(lazy_pinyin(word))
-                if len(word_pinyin) >= 4 and word_pinyin in content_pinyin:
-                    # 确认不是 Layer 1 已经抓过的（原文直接匹配）
-                    if word not in content_clean:
-                        result.block(
-                            layer="pinyin", layer_num=2,
-                            reason=f"拼音还原命中: 内容拼音含'{word_pinyin}' (原词:{word})",
-                            confidence=0.85,
-                            keywords=[f"拼音:{word}"]
-                        )
-                        return result
-        except Exception:
-            pass
+        先做拼音检测,如果通过再进行语义分析
+        """
+        # 2a: 拼音还原检测
+        if HAS_PYPINYIN:
+            try:
+                # 将内容转为拼音
+                content_pinyin = ''.join(lazy_pinyin(content_clean))
+                
+                # 将所有敏感词也转为拼音，对比
+                all_sensitive = list(self.BUILTIN_SENSITIVE_WORDS.keys())
+                for rule in self.rules:
+                    for kw in rule.get("keywords", []):
+                        if kw and len(kw) >= 2:
+                            all_sensitive.append(kw)
+                
+                for word in all_sensitive:
+                    word_pinyin = ''.join(lazy_pinyin(word))
+                    if len(word_pinyin) >= 4 and word_pinyin in content_pinyin:
+                        # 确认不是 Layer 1 已经抓过的（原文直接匹配）
+                        if word not in content_clean:
+                            result.block(
+                                layer="pinyin", layer_num=2,
+                                reason=f"拼音还原命中: 内容拼音含'{word_pinyin}' (原词:{word})",
+                                confidence=0.85,
+                                keywords=[f"拼音:{word}"]
+                            )
+                            return result
+            except Exception:
+                pass
+        
+        # 2b: 语义分析 (v2.2新增)
+        if HAS_SEMANTIC_ANALYZER:
+            try:
+                semantic_result = SEMANTIC_ANALYZER.analyze(content, self.rules)
+                if semantic_result.get("is_sensitive") and semantic_result.get("confidence", 0) >= 0.5:
+                    # 提取匹配的模式名称
+                    patterns = semantic_result.get("matched_patterns", [])
+                    pattern_names = [p.get("name", "未知") for p in patterns[:3]]
+                    
+                    result.block(
+                        layer="semantic", layer_num=2,
+                        reason=f"语义分析命中: {semantic_result.get('details', '可疑内容')}",
+                        confidence=semantic_result.get("confidence", 0.5),
+                        keywords=pattern_names if pattern_names else ["语义模式"]
+                    )
+                    return result
+            except Exception:
+                pass
         
         return result
     
