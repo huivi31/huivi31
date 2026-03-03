@@ -35,6 +35,9 @@ try:
 except ImportError:
     AsyncLLMClient = None
 
+# v2.3: 数据库集成
+from db_integration import get_db_integration
+
 CONFIG_STORE.initialize(
     default_personas=USER_PERSONAS,
     default_techniques=ATTACK_TECHNIQUES,

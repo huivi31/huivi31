@@ -48,6 +48,14 @@ from battle import (
     run_collaborative_attack, run_red_team_planning,
     OPENCLAW_BOARD
 )
+
+# v2.3: 数据库集成和监控
+from db_integration import get_db_integration
+from database import db
+from monitor import get_monitor, get_alerts, record_metric
+
+db_integration = get_db_integration()
+monitor = get_monitor()
 from orchestrator import CAMPAIGN_ORCHESTRATOR
 from alerting import dispatch_regression_alerts
 from regression_reporting import (
@@ -92,6 +100,10 @@ if Compress:
 
 # v2.1.0: 注册中间件
 error_handler(app)
+
+# v2.3: 初始化数据库
+db.initialize()
+db.create_tables()
 
 @app.before_request
 def before_request():
@@ -520,6 +532,24 @@ def index():
         community_config=COMMUNITY_CONFIG,
         doc_upload_max_mb=MAX_DOC_UPLOAD_MB,
     )
+
+
+@app.get("/dashboard")
+def dashboard():
+    """v2.3: 系统监控Dashboard"""
+    return render_template("dashboard.html")
+
+
+@app.get("/batch-test")
+def batch_test_page():
+    """v2.3: 批量测试页面"""
+    return render_template("batch_test.html")
+
+
+@app.get("/api-docs")
+def api_docs_page():
+    """v2.3: API文档页面"""
+    return render_template("api_docs.html")
 
 
 @app.post("/rules")
@@ -1200,6 +1230,286 @@ def get_inspector_stats():
         "stats": CENTRAL_INSPECTOR.get_stats(),
         "refined_standards_count": len(CENTRAL_INSPECTOR.refined_standards),
     })
+
+
+# ============================================================================
+# v2.3: 数据库管理API
+# ============================================================================
+
+@app.post("/api/db/migrate")
+@require_auth
+def api_db_migrate():
+    """
+    迁移现有battle_history到数据库
+    
+    Response:
+        {
+            "success": true,
+            "migrated_count": 100,
+            "message": "Successfully migrated 100 records"
+        }
+    """
+    try:
+        history = SYSTEM_STATE.get("battle_history", [])
+        count = db_integration.migrate_battle_history(history)
+        
+        return jsonify({
+            "success": True,
+            "migrated_count": count,
+            "message": f"Successfully migrated {count} records to database"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "MIGRATION_FAILED"
+        }), 500
+
+
+@app.get("/api/db/battle/history")
+def api_db_battle_history():
+    """
+    从数据库获取攻击历史记录
+    
+    Query:
+        ?limit=100&offset=0
+    
+    Response:
+        {
+            "success": true,
+            "records": [...],
+            "total": 100
+        }
+    """
+    limit = request.args.get("limit", 100, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    
+    try:
+        records = db_integration.get_battle_history(limit=limit, offset=offset)
+        
+        return jsonify({
+            "success": True,
+            "records": records,
+            "total": len(records),
+            "limit": limit,
+            "offset": offset
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "QUERY_FAILED"
+        }), 500
+
+
+@app.get("/api/db/battle/stats")
+def api_db_battle_stats():
+    """
+    从数据库获取攻击统计
+    
+    Query:
+        ?hours=24
+    
+    Response:
+        {
+            "success": true,
+            "stats": {...}
+        }
+    """
+    hours = request.args.get("hours", 24, type=int)
+    
+    try:
+        stats = db_integration.get_battle_stats(hours=hours)
+        
+        return jsonify({
+            "success": True,
+            "stats": stats,
+            "time_range": f"Last {hours} hours"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "STATS_FAILED"
+        }), 500
+
+
+@app.get("/api/db/health")
+def api_db_health():
+    """
+    数据库健康检查
+    
+    Response:
+        {
+            "success": true,
+            "status": "healthy",
+            "info": {...}
+        }
+    """
+    try:
+        health = db.health_check()
+        
+        return jsonify({
+            "success": health["healthy"],
+            "status": "healthy" if health["healthy"] else "unhealthy",
+            "info": health
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "status": "error",
+            "error": str(e),
+            "code": "HEALTH_CHECK_FAILED"
+        }), 500
+
+
+@app.get("/api/agent/<agent_id>/memory")
+def api_agent_memory(agent_id: str):
+    """
+    获取Agent记忆
+    
+    Response:
+        {
+            "success": true,
+            "short_term": [...],
+            "long_term_summary": {...},
+            "successful_patterns": [...]
+        }
+    """
+    try:
+        memory = db_integration.get_agent_memory(agent_id)
+        
+        short_term = memory.get_short_term()
+        successful = memory.get_successful_patterns(limit=10)
+        
+        return jsonify({
+            "success": True,
+            "agent_id": agent_id,
+            "short_term_count": len(short_term),
+            "short_term": short_term[:20],  # 只返回最近20条
+            "successful_patterns": successful
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "MEMORY_QUERY_FAILED"
+        }), 500
+
+
+# ============================================================================
+# v2.3: 监控告警API
+# ============================================================================
+
+@app.get("/api/monitor/alerts")
+def api_monitor_alerts():
+    """
+    获取监控告警列表
+    
+    Query:
+        ?level=warning&limit=50
+    
+    Response:
+        {
+            "success": true,
+            "alerts": [...]
+        }
+    """
+    level = request.args.get("level")
+    limit = request.args.get("limit", 50, type=int)
+    
+    try:
+        alerts = get_alerts(level=level, limit=limit)
+        return jsonify({
+            "success": True,
+            "alerts": alerts,
+            "count": len(alerts)
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "ALERTS_QUERY_FAILED"
+        }), 500
+
+
+@app.get("/api/monitor/stats")
+def api_monitor_stats():
+    """
+    获取监控统计
+    
+    Response:
+        {
+            "success": true,
+            "stats": {...}
+        }
+    """
+    try:
+        stats = monitor.get_stats()
+        
+        # 添加最新指标值
+        stats["latest_metrics"] = {
+            "bypass_rate": monitor.get_latest_metric("bypass_success"),
+            "avg_processing_time": monitor.get_latest_metric("processing_time"),
+            "avg_complexity": monitor.get_latest_metric("complexity")
+        }
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "MONITOR_STATS_FAILED"
+        }), 500
+
+
+@app.post("/api/monitor/rules")
+@require_auth
+def api_add_alert_rule():
+    """
+    添加自定义告警规则
+    
+    Body:
+        {
+            "name": "rule_name",
+            "metric": "bypass_rate",
+            "threshold": 0.7,
+            "operator": ">",
+            "level": "warning",
+            "message": "Custom message"
+        }
+    
+    Response:
+        {
+            "success": true,
+            "message": "Alert rule added"
+        }
+    """
+    try:
+        data = request.json or {}
+        
+        monitor.add_alert_rule(
+            name=data.get("name"),
+            metric=data.get("metric"),
+            threshold=float(data.get("threshold", 0)),
+            operator=data.get("operator", ">"),
+            level=data.get("level", "warning"),
+            message=data.get("message", "")
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": "Alert rule added successfully"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "code": "ADD_RULE_FAILED"
+        }), 500
 
 
 @app.get("/agent/<persona_id>/state")

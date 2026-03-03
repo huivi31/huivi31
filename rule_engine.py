@@ -28,8 +28,14 @@ try:
     from semantic_analyzer import SEMANTIC_ANALYZER
     HAS_SEMANTIC_ANALYZER = True
 except ImportError:
-    SEMANTIC_ANALYZER = None
     HAS_SEMANTIC_ANALYZER = False
+
+# v2.3: L3 正则优化器
+try:
+    from regex_optimizer import get_regex_optimizer
+    HAS_REGEX_OPTIMIZER = True
+except ImportError:
+    HAS_REGEX_OPTIMIZER = False
 
 
 class AuditResult:
@@ -126,6 +132,11 @@ class RuleEngine:
         self.llm_provider = ""
         self.llm_model = ""
         
+        # v2.3: L3 正则优化器
+        self.regex_optimizer = None
+        if HAS_REGEX_OPTIMIZER:
+            self.regex_optimizer = get_regex_optimizer()
+        
         # 统计
         self.stats = {
             "total_checked": 0,
@@ -144,6 +155,14 @@ class RuleEngine:
             rule_id = rule.get("id", "")
             keywords = rule.get("keywords", [])
             self.rule_keywords[rule_id] = keywords
+        
+        # v2.3: 初始化正则优化器
+        if self.regex_optimizer:
+            try:
+                self.regex_optimizer.initialize(rules)
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to initialize regex optimizer: {e}")
     
     def set_llm(self, client, provider: str, model: str):
         """设置可选的 LLM 兜底"""
@@ -161,7 +180,7 @@ class RuleEngine:
     
     def inspect(self, content: str, technique_used: str = "") -> AuditResult:
         """
-        主审核入口 - 5层流水线
+        主审核入口 - 5层流水线（带L3正则优化预扫描）
         
         Returns:
             AuditResult with hit_layer indicating which layer caught it
@@ -173,6 +192,21 @@ class RuleEngine:
             return result
         
         start_time = time.time()
+        
+        # v2.3: L3正则优化预扫描（快速过滤安全内容）
+        if self.regex_optimizer:
+            try:
+                quick_scan = self.regex_optimizer.quick_scan(content)
+                if not quick_scan.get("has_match"):
+                    # 没有任何匹配，快速返回
+                    result.processing_time = round(time.time() - start_time, 3)
+                    return result
+                # 有匹配，继续详细检测
+                # 但可以利用matched_keywords加速后续检测
+                result._quick_scan_result = quick_scan
+            except Exception:
+                pass  # 降级到完整检测
+        
         content_lower = content.lower()
         # 去除空格、标点、特殊符号后的版本
         content_clean = re.sub(r'[\s\.\,\;\:\!\?\·\|\-\_\/\\。，；：！？、\u200b\u200c\u200d\ufeff]', '', content)

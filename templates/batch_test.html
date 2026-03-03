@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量测试 - v2.3.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0e27;
+            color: #e4e4e4;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #64748b;
+        }
+        
+        .control-panel {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        select, input {
+            width: 100%;
+            padding: 12px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #e4e4e4;
+            font-size: 14px;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .agent-selection {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #0f172a;
+            border-radius: 8px;
+        }
+        
+        .agent-checkbox {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #1e293b;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .agent-checkbox:hover {
+            background: #334155;
+        }
+        
+        .agent-checkbox input {
+            width: auto;
+            margin-right: 8px;
+        }
+        
+        .agent-checkbox label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: normal;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: #334155;
+            color: #e4e4e4;
+        }
+        
+        .btn-secondary:hover {
+            background: #475569;
+        }
+        
+        .progress-section {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+            display: none;
+        }
+        
+        .progress-section.active {
+            display: block;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #0f172a;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .results-section {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #334155;
+        }
+        
+        .result-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stat-label {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+        
+        .results-table {
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #334155;
+        }
+        
+        th {
+            background: #0f172a;
+            font-weight: 600;
+            color: #94a3b8;
+            font-size: 13px;
+            position: sticky;
+            top: 0;
+        }
+        
+        td {
+            color: #e4e4e4;
+            font-size: 14px;
+        }
+        
+        .badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-success {
+            background: #10b98120;
+            color: #10b981;
+        }
+        
+        .badge-danger {
+            background: #ef444420;
+            color: #ef4444;
+        }
+        
+        .log-entry {
+            padding: 8px 12px;
+            margin: 4px 0;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .log-info {
+            background: #1e40af20;
+            color: #60a5fa;
+        }
+        
+        .log-success {
+            background: #10b98120;
+            color: #10b981;
+        }
+        
+        .log-error {
+            background: #ef444420;
+            color: #ef4444;
+        }
+        
+        .select-all {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #0f172a;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .select-all input {
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 批量攻防测试</h1>
+            <p class="subtitle">快速验证所有Agent的攻击能力</p>
+        </header>
+        
+        <!-- 控制面板 -->
+        <div class="control-panel">
+            <div class="form-group">
+                <label>测试模式</label>
+                <select id="test-mode">
+                    <option value="all">所有Agent（完整测试）</option>
+                    <option value="selected">选定Agent</option>
+                    <option value="random">随机10个Agent</option>
+                </select>
+            </div>
+            
+            <div class="form-group" id="agent-selection-container" style="display: none;">
+                <label>选择Agent</label>
+                <div class="select-all">
+                    <input type="checkbox" id="select-all-checkbox">
+                    <label for="select-all-checkbox" style="color: #e4e4e4;">全选/取消全选</label>
+                </div>
+                <div class="agent-selection" id="agent-list">
+                    <!-- 动态加载 -->
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>测试话题（可选）</label>
+                <input type="text" id="test-topic" placeholder="留空则自动选择敏感话题">
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-primary" id="start-btn" onclick="startBatchTest()">
+                    🚀 开始批量测试
+                </button>
+                <button class="btn-secondary" onclick="window.location.href='/'">
+                    ← 返回主页
+                </button>
+            </div>
+        </div>
+        
+        <!-- 进度显示 -->
+        <div class="progress-section" id="progress-section">
+            <h3 style="margin-bottom: 15px;">测试进度</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%">0%</div>
+            </div>
+            <div id="progress-log" style="max-height: 200px; overflow-y: auto;"></div>
+        </div>
+        
+        <!-- 结果展示 -->
+        <div class="results-section" id="results-section" style="display: none;">
+            <h3 style="margin-bottom: 20px;">📊 测试结果</h3>
+            
+            <div class="result-summary">
+                <div class="stat-box">
+                    <div class="stat-value" id="total-tests">0</div>
+                    <div class="stat-label">总测试数</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="bypassed-count">0</div>
+                    <div class="stat-label">成功绕过</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="detected-count">0</div>
+                    <div class="stat-label">被拦截</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="bypass-rate-result">0%</div>
+                    <div class="stat-label">绕过率</div>
+                </div>
+            </div>
+            
+            <div class="results-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Agent</th>
+                            <th>技巧</th>
+                            <th>话题</th>
+                            <th>结果</th>
+                            <th>拦截层</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-tbody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button class="btn-primary" onclick="exportResults()">
+                    💾 导出结果
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let testResults = [];
+        let allAgents = [];
+        
+        // 页面加载时获取Agent列表
+        window.onload = async function() {
+            try {
+                const response = await fetch('/personas');
+                const personas = await response.json();
+                allAgents = personas;
+                renderAgentList(personas);
+            } catch (e) {
+                console.error('Failed to load agents:', e);
+                addLog('❌ 加载Agent列表失败', 'error');
+            }
+        };
+        
+        // 渲染Agent列表
+        function renderAgentList(personas) {
+            const container = document.getElementById('agent-list');
+            container.innerHTML = personas.map(p => `
+                <div class="agent-checkbox">
+                    <input type="checkbox" id="agent-${p.id}" value="${p.id}">
+                    <label for="agent-${p.id}">${p.name}</label>
+                </div>
+            `).join('');
+        }
+        
+        // 监听测试模式变化
+        document.getElementById('test-mode').addEventListener('change', function(e) {
+            const container = document.getElementById('agent-selection-container');
+            if (e.target.value === 'selected') {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        });
+        
+        // 全选/取消全选
+        document.getElementById('select-all-checkbox').addEventListener('change', function(e) {
+            const checkboxes = document.querySelectorAll('.agent-checkbox input[type="checkbox"]');
+            checkboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+        
+        // 开始批量测试
+        async function startBatchTest() {
+            const mode = document.getElementById('test-mode').value;
+            const topic = document.getElementById('test-topic').value.trim() || null;
+            
+            let agentIds = [];
+            
+            if (mode === 'all') {
+                agentIds = allAgents.map(a => a.id);
+            } else if (mode === 'selected') {
+                const checkboxes = document.querySelectorAll('.agent-checkbox input[type="checkbox"]:checked');
+                agentIds = Array.from(checkboxes).map(cb => cb.value);
+                
+                if (agentIds.length === 0) {
+                    alert('请至少选择一个Agent');
+                    return;
+                }
+            } else if (mode === 'random') {
+                const shuffled = [...allAgents].sort(() => 0.5 - Math.random());
+                agentIds = shuffled.slice(0, 10).map(a => a.id);
+            }
+            
+            // 显示进度
+            document.getElementById('progress-section').classList.add('active');
+            document.getElementById('results-section').style.display = 'none';
+            document.getElementById('progress-log').innerHTML = '';
+            testResults = [];
+            
+            // 禁用开始按钮
+            const startBtn = document.getElementById('start-btn');
+            startBtn.disabled = true;
+            startBtn.textContent = '⏳ 测试中...';
+            
+            addLog(`🚀 开始批量测试，共 ${agentIds.length} 个Agent`, 'info');
+            
+            try {
+                const response = await fetch('/api/battle/batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        agent_ids: agentIds,
+                        target_keyword: topic
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    testResults = data.results;
+                    addLog(`✅ 测试完成！总计 ${testResults.length} 个结果`, 'success');
+                    displayResults(data);
+                } else {
+                    addLog(`❌ 测试失败: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                addLog(`❌ 请求失败: ${e.message}`, 'error');
+            }
+            
+            // 恢复按钮
+            startBtn.disabled = false;
+            startBtn.textContent = '🚀 开始批量测试';
+        }
+        
+        // 添加日志
+        function addLog(message, type = 'info') {
+            const log = document.getElementById('progress-log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // 显示结果
+        function displayResults(data) {
+            document.getElementById('results-section').style.display = 'block';
+            
+            // 更新统计
+            const total = data.total_tests;
+            const bypassed = data.bypass_summary.bypassed;
+            const detected = data.bypass_summary.detected;
+            const rate = (bypassed / total * 100).toFixed(1);
+            
+            document.getElementById('total-tests').textContent = total;
+            document.getElementById('bypassed-count').textContent = bypassed;
+            document.getElementById('detected-count').textContent = detected;
+            document.getElementById('bypass-rate-result').textContent = `${rate}%`;
+            
+            // 更新表格
+            const tbody = document.getElementById('results-tbody');
+            tbody.innerHTML = data.results.map(r => {
+                const success = r.result.bypass_success;
+                const badge = success ? 
+                    '<span class="badge badge-danger">✓ 绕过</span>' :
+                    '<span class="badge badge-success">✗ 拦截</span>';
+                const layer = success ? '-' : (r.defense.hit_layer || '未知');
+                
+                return `
+                    <tr>
+                        <td>${r.persona_name}</td>
+                        <td>${r.attack.technique_used}</td>
+                        <td>${r.target_topic}</td>
+                        <td>${badge}</td>
+                        <td>${layer}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // 导出结果
+        function exportResults() {
+            if (testResults.length === 0) {
+                alert('没有可导出的结果');
+                return;
+            }
+            
+            const csv = convertToCSV(testResults);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `batch_test_${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+        }
+        
+        // 转换为CSV
+        function convertToCSV(results) {
+            const headers = ['Agent ID', 'Agent Name', 'Technique', 'Topic', 'Bypassed', 'Blocked At'];
+            const rows = results.map(r => [
+                r.persona_id,
+                r.persona_name,
+                r.attack.technique_used,
+                r.target_topic,
+                r.result.bypass_success ? 'Yes' : 'No',
+                r.defense.hit_layer || ''
+            ]);
+            
+            const csvContent = [
+                headers.join(','),
+                ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+            ].join('\n');
+            
+            return '\ufeff' + csvContent; // BOM for Excel UTF-8
+        }
+    </script>
+</body>
+</html>

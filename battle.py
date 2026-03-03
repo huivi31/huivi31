@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Battle and interaction logic between agents.
+v2.3.0 - 集成数据库持久化
 """
 
 import random
@@ -11,6 +12,14 @@ from agents import (
     SYSTEM_STATE, PERSONA_INDEX, EVENT_BUS,
     AttackAgent, CENTRAL_INSPECTOR, load_agent_runtime
 )
+
+# v2.3: 数据库集成
+from db_integration import get_db_integration
+
+# v2.3: 监控系统
+from monitor import record_metric
+
+db_integration = get_db_integration()
 
 # ============================================================================
 # OpenClaw 社区协作系统 (The Board)
@@ -362,10 +371,64 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
     # 保存到历史
     SYSTEM_STATE["battle_history"].append(battle_record)
     
+    # v2.3: 保存到数据库
+    try:
+        db_integration.save_battle_record(
+            agent_id=persona_id,
+            agent_name=persona["name"],
+            topic=target_keyword,
+            technique=technique_used,
+            content=content,
+            bypass_success=bypass_success,
+            blocked_at=inspection_result.get("hit_layer", ""),
+            confidence=inspection_result.get("confidence", 0),
+            complexity=attack_result.get("complexity_score", 5),
+            agent_archetype=persona.get("category", ""),
+            evolution_level=attack_agent.evolution_level,
+            generation_time=attack_time,
+            processing_time=inspection_result.get("processing_time", 0),
+            matched_keywords=inspection_result.get("hit_keywords", []),
+            metadata={
+                "strategy": attack_result.get("strategy", ""),
+                "iteration": iteration,
+                "learned_techniques_count": len(attack_agent.learned_techniques),
+                "is_fallback": attack_result.get("is_fallback", False),
+            }
+        )
+        
+        # v2.3: 保存到Agent记忆系统
+        agent_memory = db_integration.get_agent_memory(persona_id)
+        
+        # 短期记忆：当前尝试
+        agent_memory.add_short_term(content, technique=technique_used)
+        
+        # 长期记忆：根据成功/失败保存
+        if bypass_success:
+            agent_memory.add_long_term(content, success=True, technique=technique_used)
+        else:
+            agent_memory.add_long_term(content, success=False, technique=technique_used)
+            # 失败模式
+            agent_memory.add_failure_pattern(
+                content,
+                blocked_at=inspection_result.get("hit_layer", ""),
+                reason=inspection_result.get("detection_reason", "")
+            )
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to save to database: {e}")
+    
     # 🧠 新增：如果成功，加入共享池供其他Agent学习
     if bypass_success:
         from agents import share_success_to_pool
         share_success_to_pool(attack_result)
+    
+    # v2.3: 记录监控指标
+    try:
+        record_metric("bypass_success", 1.0 if bypass_success else 0.0)
+        record_metric("processing_time", attack_time + inspection_result.get("processing_time", 0))
+        record_metric("complexity", attack_result.get("complexity_score", 5))
+    except Exception:
+        pass
     
     return battle_record
 
