@@ -1,29 +1,15 @@
 services:
   - type: web
-    name: digital-twin-risk-wind-tunnel
+    name: digital-twin-evolution
     env: python
     region: oregon
     plan: free
     branch: main
-    buildCommand: pip install -r requirements.txt && python -c "from database import db; db.initialize(); db.create_tables()"
-    startCommand: python web_app.py
+    buildCommand: pip install flask aiohttp beautifulsoup4 lxml google-generativeai
+    startCommand: python evolution_web.py
     envVars:
       - key: GEMINI_API_KEY
-        sync: false
-      - key: SECRET_KEY
-        generateValue: true
-      - key: DATABASE_URL
-        fromDatabase:
-          name: digital-twin-db
-          property: connectionString
-      - key: PYTHON_VERSION
-        value: 3.10.0
-    healthCheckPath: /api/db/health
+        value: AIzaSyBQs8YMjD16htU2S9T6nMbPNJj-4QueBeE
+      - key: PORT
+        value: 5000
     autoDeploy: true
-
-databases:
-  - name: digital-twin-db
-    databaseName: digital_twin
-    user: dtuser
-    plan: free
-    region: oregon
