@@ -3085,5 +3085,61 @@ def reset_test_workflow():
     return reset_system()
 
 
+# ==================== 自进化系统路由 ====================
+
+@app.route("/evolution")
+def evolution_dashboard():
+    """进化系统Dashboard页面"""
+    return render_template("evolution_dashboard.html")
+
+
+@app.route("/api/evolution/status")
+def get_evolution_status():
+    """获取进化系统状态"""
+    import glob
+    from pathlib import Path
+    
+    # 查找最新的进化日志
+    output_dir = Path("/tmp/evolution_demo")
+    if not output_dir.exists():
+        return jsonify({
+            "status": "no_data",
+            "message": "还没有进化数据，请先运行 python test_evolution.py"
+        })
+    
+    # 读取最新的进化结果
+    log_files = list(output_dir.glob("evolution_log_*.json"))
+    if not log_files:
+        return jsonify({
+            "status": "no_data",
+            "message": "没有找到进化日志"
+        })
+    
+    latest_log = sorted(log_files)[-1]
+    with open(latest_log, 'r', encoding='utf-8') as f:
+        log_data = json.load(f)
+    
+    # 读取技术列表
+    tech_files = list(output_dir.glob("techniques_*.json"))
+    techniques = []
+    if tech_files:
+        latest_tech = sorted(tech_files)[-1]
+        with open(latest_tech, 'r', encoding='utf-8') as f:
+            techniques = json.load(f)
+    
+    return jsonify({
+        "status": "success",
+        "timestamp": log_data["timestamp"],
+        "stats": {
+            "today_intelligence": log_data["stages"]["intelligence_collection"]["total_collected"],
+            "total_techniques": log_data["stages"]["knowledge_extraction"]["extracted_count"],
+            "high_value_count": log_data["stages"]["filtering"]["high_value_count"],
+            "avg_score": log_data["stages"]["value_assessment"]["avg_score"]
+        },
+        "sources": log_data["stages"]["intelligence_collection"]["by_source"],
+        "techniques": techniques[:10]  # 返回前10个
+    })
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)

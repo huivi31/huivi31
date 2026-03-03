@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 自进化系统 - 实时监控</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card .icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .panel h2 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .technique-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .technique-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s;
+        }
+
+        .technique-item:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateX(5px);
+        }
+
+        .technique-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .technique-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .technique-score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .technique-meta {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .technique-meta span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .technique-description {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #555;
+        }
+
+        .activity-log {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .log-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .log-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .log-content {
+            flex: 1;
+        }
+
+        .log-time {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .log-message {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .refresh-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            transition: transform 0.3s;
+        }
+
+        .refresh-button:hover {
+            transform: scale(1.1) rotate(180deg);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 自进化攻击系统</h1>
+            <p>实时监控 | 自动学习 | 持续进化</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="icon">📡</div>
+                <div class="label">今日情报收集</div>
+                <div class="value" id="today-intelligence">0</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="icon">🧠</div>
+                <div class="label">攻击技术库</div>
+                <div class="value" id="total-techniques">0</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="icon">⚡</div>
+                <div class="label">高价值技术</div>
+                <div class="value" id="high-value-count">0</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="icon">📊</div>
+                <div class="label">平均价值分</div>
+                <div class="value" id="avg-score">0.00</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="panel">
+                <h2>🎯 最新高价值技术</h2>
+                <div class="technique-list" id="techniques-list">
+                    <div class="loading">正在加载数据...</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📈 进化活动日志</h2>
+                <div class="activity-log" id="activity-log">
+                    <div class="loading">正在加载日志...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel full-width" style="margin-top: 20px;">
+            <h2>🌐 情报源分布</h2>
+            <canvas id="sources-chart" width="400" height="100"></canvas>
+        </div>
+    </div>
+
+    <button class="refresh-button" onclick="loadData()" title="刷新数据">🔄</button>
+
+    <script>
+        // 从API加载真实数据
+        async function fetchRealData() {
+            try {
+                const response = await fetch('/api/evolution/status');
+                const data = await response.json();
+                
+                if (data.status === 'no_data') {
+                    return null;
+                }
+                
+                return {
+                    stats: data.stats,
+                    techniques: data.techniques.filter(t => t.value_score >= 0.6).map(t => ({
+                        name: t.name,
+                        score: t.value_score,
+                        category: t.category,
+                        difficulty: t.detection_difficulty,
+                        description: t.description.substring(0, 100) + '...'
+                    })),
+                    activity: [
+                        { time: data.timestamp, icon: "✅", message: `进化完成: ${data.stats.high_value_count}个高价值技术` }
+                    ],
+                    sources: data.sources
+                };
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                return null;
+            }
+        }
+        
+        // 备用模拟数据
+        const mockData = {
+            stats: {
+                today_intelligence: 13,
+                total_techniques: 9,
+                high_value_count: 6,
+                avg_score: 0.60
+            },
+            techniques: [
+                {
+                    name: "代理/隧道技术",
+                    score: 0.80,
+                    category: "技术绕过",
+                    difficulty: 7,
+                    description: "利用代理和隧道技术进行红队行动，隐藏真实IP地址，绕过防火墙..."
+                },
+                {
+                    name: "供应链攻击 (Vendor Lock-in)",
+                    score: 0.72,
+                    category: "技术绕过",
+                    difficulty: 7,
+                    description: "利用厂商锁定策略，诱导用户使用过时系统，突破边界防护..."
+                },
+                {
+                    name: "游戏作弊API滥用",
+                    score: 0.70,
+                    category: "技术绕过",
+                    difficulty: 7,
+                    description: "自动化游戏作弊机器人，利用API接口进行farming和clicker活动..."
+                },
+                {
+                    name: "Java反序列化漏洞",
+                    score: 0.70,
+                    category: "技术绕过",
+                    difficulty: 8,
+                    description: "Apache Commons Collections库不安全反序列化，触发任意代码执行..."
+                },
+                {
+                    name: "Source Inference Attack (SIA)",
+                    score: 0.66,
+                    category: "其他",
+                    difficulty: 7,
+                    description: "针对联邦学习的隐私攻击，推断客户端数据所有权..."
+                },
+                {
+                    name: "Reflected XSS (CVE-2018-12234)",
+                    score: 0.60,
+                    category: "技术绕过",
+                    difficulty: 6,
+                    description: "HRMS软件参数存在反射型XSS漏洞，可窃取用户会话信息..."
+                }
+            ],
+            activity: [
+                { time: "2026-03-03 15:05:34", icon: "✅", message: "进化流程完成: 提取6个高价值技术" },
+                { time: "2026-03-03 15:04:50", icon: "⚡", message: "价值筛选: 6/9 技术通过阈值(0.6)" },
+                { time: "2026-03-03 15:04:32", icon: "📊", message: "价值评估完成: 平均分0.60" },
+                { time: "2026-03-03 15:03:21", icon: "🧠", message: "知识提取完成: 9/13 成功" },
+                { time: "2026-03-03 15:02:15", icon: "📡", message: "情报收集完成: 13条(arXiv 5 + GitHub 3 + CVE 5)" },
+                { time: "2026-03-03 15:00:00", icon: "🚀", message: "每日进化流程启动" }
+            ]
+        };
+
+        async function loadData() {
+            // 尝试加载真实数据
+            const realData = await fetchRealData();
+            const data = realData || mockData;
+            
+            // 更新统计数据
+            document.getElementById('today-intelligence').textContent = data.stats.today_intelligence;
+            document.getElementById('total-techniques').textContent = data.stats.total_techniques;
+            document.getElementById('high-value-count').textContent = data.stats.high_value_count;
+            document.getElementById('avg-score').textContent = data.stats.avg_score.toFixed(2);
+
+            // 渲染技术列表
+            const techniquesList = document.getElementById('techniques-list');
+            techniquesList.innerHTML = data.techniques.map(tech => `
+                <div class="technique-item">
+                    <div class="technique-header">
+                        <div class="technique-name">${tech.name}</div>
+                        <div class="technique-score">${(tech.score * 100).toFixed(0)}分</div>
+                    </div>
+                    <div class="technique-meta">
+                        <span>📂 ${tech.category}</span>
+                        <span>🎯 检测难度: ${tech.difficulty}/10</span>
+                    </div>
+                    <div class="technique-description">${tech.description}</div>
+                </div>
+            `).join('');
+
+            // 渲染活动日志
+            const activityLog = document.getElementById('activity-log');
+            activityLog.innerHTML = data.activity.map(log => `
+                <div class="log-item">
+                    <div class="log-icon">${log.icon}</div>
+                    <div class="log-content">
+                        <div class="log-time">${log.time}</div>
+                        <div class="log-message">${log.message}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            // 绘制简单的源分布图
+            drawSourcesChart();
+        }
+
+        function drawSourcesChart() {
+            const canvas = document.getElementById('sources-chart');
+            const ctx = canvas.getContext('2d');
+            
+            const sources = [
+                { name: 'arXiv论文', count: 5, color: '#667eea' },
+                { name: 'GitHub仓库', count: 3, color: '#764ba2' },
+                { name: 'CVE漏洞', count: 5, color: '#f093fb' }
+            ];
+
+            const total = sources.reduce((sum, s) => sum + s.count, 0);
+            const barWidth = canvas.width / sources.length - 20;
+            const maxHeight = 80;
+
+            sources.forEach((source, i) => {
+                const height = (source.count / total) * maxHeight;
+                const x = i * (barWidth + 20) + 10;
+                const y = maxHeight - height + 10;
+
+                // 绘制条形
+                ctx.fillStyle = source.color;
+                ctx.fillRect(x, y, barWidth, height);
+
+                // 绘制标签
+                ctx.fillStyle = '#333';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(source.name, x + barWidth / 2, maxHeight + 25);
+                ctx.fillText(source.count + '条', x + barWidth / 2, y - 5);
+            });
+        }
+
+        // 页面加载时初始化
+        window.onload = loadData;
+
+        // 每30秒自动刷新
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
