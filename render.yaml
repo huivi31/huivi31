@@ -5,7 +5,7 @@ services:
     region: oregon
     plan: free
     branch: main
-    buildCommand: pip install flask aiohttp beautifulsoup4 lxml google-generativeai
+    buildCommand: pip install -r requirements.txt
     startCommand: python evolution_web.py
     envVars:
       - key: GEMINI_API_KEY
